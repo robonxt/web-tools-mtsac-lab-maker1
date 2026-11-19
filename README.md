@@ -41,7 +41,7 @@ No `.env` file or API keys are needed—all data saves locally in browser `local
 
 ## Deploying from GitHub
 
-LabPress includes ready-to-use configurations for both **Vercel** (`vercel.json`) and **Netlify** (`netlify.toml`), plus a GitHub Actions CI workflow (`.github/workflows/ci.yml`) that runs typechecking and a production build on every pull request and push to `main`.
+LabPress works out of the box with **GitHub Pages** (`.github/workflows/deploy-pages.yml`), **Vercel** (`vercel.json`), and **Netlify** (`netlify.toml`), plus a GitHub Actions CI workflow (`.github/workflows/ci.yml`) that runs typechecking and a production build on pull requests and pushes to `main`.
 
 ### 1. Push to GitHub
 
@@ -54,14 +54,21 @@ git remote add origin https://github.com/<your-username>/<your-repo>.git
 git push -u origin main
 ```
 
-### 2. Deploy on Vercel (Auto-Deploy on Push to `main`)
+### 2. Deploy on GitHub Pages (Auto-Deploy on Push to `main`)
+
+1. Open your repository on GitHub and go to **Settings → Pages**.
+2. Under **Build and deployment → Source**, select **GitHub Actions**.
+3. Push to `main` (or run **Actions → Deploy to GitHub Pages → Run workflow** manually).
+4. The workflow automatically sets `VITE_BASE_PATH` for your repository subpath (`https://<username>.github.io/<repo-name>/`) or root `/` for custom domains / `<username>.github.io` repos, copies `404.html` for SPA fallback, and publishes `dist/`.
+
+### 3. Or Deploy on Vercel (Auto-Deploy on Push to `main`)
 
 1. Sign in to [Vercel](https://vercel.com) and click **Add New → Project**.
 2. Import your GitHub repository.
 3. Vercel automatically detects `vercel.json` (`vite`, build command `npm run build`, output directory `dist`).
 4. Click **Deploy**—every future push to `main` automatically deploys to production, and pull requests receive preview URLs.
 
-### 3. Or Deploy on Netlify (Auto-Deploy on Push to `main`)
+### 4. Or Deploy on Netlify (Auto-Deploy on Push to `main`)
 
 1. Sign in to [Netlify](https://app.netlify.com) and click **Add new site → Import an existing project**.
 2. Connect GitHub and select your repository.
