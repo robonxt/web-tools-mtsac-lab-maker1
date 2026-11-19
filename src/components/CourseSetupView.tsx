@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Braces,
-  GitCompare,
-  History,
-  Layers,
-  Palette,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { GitCompare, Plus, Trash2 } from 'lucide-react';
 import {
   Course,
   LabDocument,
@@ -53,41 +45,8 @@ interface CourseSetupViewProps {
   onDeleteSnapshotForLab: (labId: string, snapshotId: string) => void;
 }
 
-const SETUP_NAV: Array<{
-  id: SetupSection;
-  label: string;
-  desc: string;
-  icon: React.FC<{ className?: string }>;
-}> = [
-  {
-    id: 'layouts',
-    label: 'Professor Layouts',
-    desc: 'Consistent styling per course',
-    icon: Palette,
-  },
-  {
-    id: 'variables',
-    label: 'Shared Variables',
-    desc: 'Dates, VMs & runtime values',
-    icon: Braces,
-  },
-  {
-    id: 'modules',
-    label: 'Reusable Modules',
-    desc: 'Synced setup & policy blocks',
-    icon: Layers,
-  },
-  {
-    id: 'snapshots',
-    label: 'Semester Snapshots',
-    desc: 'History, diffs & rollbacks',
-    icon: History,
-  },
-];
-
 export const CourseSetupView: React.FC<CourseSetupViewProps> = ({
   section,
-  onChangeSection,
   layoutProfiles,
   courses,
   labs,
@@ -136,44 +95,7 @@ export const CourseSetupView: React.FC<CourseSetupViewProps> = ({
 
   return (
     <div className="flex-1 flex h-full min-h-0 overflow-hidden bg-[#F1F5F9]">
-      {/* Setup Left Sub-Navigation */}
-      <aside className="w-[232px] shrink-0 bg-white border-r border-slate-200 p-3 flex flex-col gap-1">
-        <div className="px-2.5 pt-1 pb-2.5">
-          <div className="text-xs font-semibold text-slate-900">Course Setup</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">
-            Configure once, keep every sheet consistent
-          </div>
-        </div>
-        {SETUP_NAV.map(({ id, label, desc, icon: Icon }) => {
-          const active = section === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onChangeSection(id)}
-              className={`w-full text-left px-3 py-2.5 rounded-md flex items-start gap-2.5 transition-colors cursor-pointer ${
-                active
-                  ? 'bg-blue-50/90 text-blue-900'
-                  : 'text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Icon
-                className={`w-4 h-4 mt-0.5 shrink-0 ${
-                  active ? 'text-blue-700' : 'text-slate-400'
-                }`}
-              />
-              <div className="min-w-0">
-                <div className={`text-xs ${active ? 'font-semibold' : 'font-medium'}`}>
-                  {label}
-                </div>
-                <div className="text-[11px] text-slate-500 truncate">{desc}</div>
-              </div>
-            </button>
-          );
-        })}
-      </aside>
-
-      {/* Active Setup Content */}
+      {/* Active Setup Content (navigation lives in the unified top WorkspaceBar) */}
       <div className="flex-1 flex min-w-0 overflow-hidden">
         {section === 'layouts' && (
           <LayoutsView

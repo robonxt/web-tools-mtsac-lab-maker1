@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  GripVertical,
   Layers,
   Plus,
   Trash2,
@@ -20,6 +21,7 @@ import {
 } from '../types/lab';
 import { createId } from '../lib/blockFactory';
 import { resolveVariables } from '../lib/variables';
+import { writeDragPayload } from '../lib/dnd';
 import { InlineRichText } from './InlineRichText';
 import { FormattedTextarea } from './FormattedTextarea';
 
@@ -1074,11 +1076,26 @@ export const BlockView: React.FC<BlockViewProps> = ({
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
         }`}
       >
+        <span
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            writeDragPayload(e.dataTransfer, {
+              kind: 'move-block',
+              blockId: block.id,
+            });
+          }}
+          title="Drag to reorder"
+          className="p-1 text-slate-400 hover:text-slate-800 cursor-grab active:cursor-grabbing"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </span>
+        <span className="h-3.5 w-px bg-slate-200 mx-0.5" aria-hidden="true" />
         <button
           type="button"
           onClick={() => onMove?.(-1)}
           disabled={index === 0}
-          title="Move block up"
+          title="Move up"
           className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 cursor-pointer"
         >
           <ArrowUp className="w-3.5 h-3.5" />
@@ -1087,7 +1104,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
           type="button"
           onClick={() => onMove?.(1)}
           disabled={index === totalBlocks - 1}
-          title="Move block down"
+          title="Move down"
           className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 cursor-pointer"
         >
           <ArrowDown className="w-3.5 h-3.5" />
@@ -1102,8 +1119,8 @@ export const BlockView: React.FC<BlockViewProps> = ({
           }
           title={
             isInstructorOnly
-              ? 'Make visible to students & instructors'
-              : 'Mark as Instructor Only (hidden from students)'
+              ? 'Shown in Answer Key only — click to show to students too'
+              : 'Shown to all — click to make Answer Key only'
           }
           className={`p-1 rounded cursor-pointer ${
             isInstructorOnly
@@ -1116,7 +1133,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
         <button
           type="button"
           onClick={() => onDuplicate?.()}
-          title="Duplicate block"
+          title="Duplicate"
           className="p-1 text-slate-500 hover:text-slate-900 cursor-pointer"
         >
           <Copy className="w-3.5 h-3.5" />
@@ -1124,7 +1141,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
         <button
           type="button"
           onClick={() => onDelete?.()}
-          title="Delete block"
+          title="Delete"
           className="p-1 text-slate-500 hover:text-red-600 cursor-pointer"
         >
           <Trash2 className="w-3.5 h-3.5" />

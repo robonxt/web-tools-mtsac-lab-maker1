@@ -88,31 +88,31 @@ export const FormattedTextarea: React.FC<FormattedTextareaProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => wrapSelection('**', '**', 'bold text')}
-          title="Bold selected text (Ctrl/Cmd+B)"
-          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+          aria-label="Bold"
+          title="Bold (Ctrl/Cmd+B)"
+          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
         >
-          <Bold className="w-3 h-3" />
-          {!compactToolbar && 'Bold'}
+          <Bold className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => wrapSelection('*', '*', 'italic text')}
-          title="Italicize selected text (Ctrl/Cmd+I)"
-          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+          aria-label="Italic"
+          title="Italic (Ctrl/Cmd+I)"
+          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
         >
-          <Italic className="w-3 h-3" />
-          {!compactToolbar && 'Italic'}
+          <Italic className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => wrapSelection('`', '`', 'command')}
-          title="Format selected text as inline code (Ctrl/Cmd+E)"
-          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors cursor-pointer"
+          aria-label="Inline code"
+          title="Inline code (Ctrl/Cmd+E)"
+          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer"
         >
-          <Code className="w-3 h-3" />
-          {!compactToolbar && 'Code'}
+          <Code className="w-3.5 h-3.5" />
         </button>
 
         <span className="h-3.5 w-px bg-slate-200 mx-0.5" aria-hidden="true" />
@@ -122,6 +122,7 @@ export const FormattedTextarea: React.FC<FormattedTextareaProps> = ({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setShowVars((v) => !v)}
+            title="Insert a shared course variable at cursor"
             className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
               showVars
                 ? 'bg-blue-700 text-white'
@@ -129,7 +130,7 @@ export const FormattedTextarea: React.FC<FormattedTextareaProps> = ({
             }`}
           >
             <Braces className="w-3 h-3" />
-            + Variable
+            {compactToolbar ? 'Var' : 'Variable'}
           </button>
 
           {showVars && (

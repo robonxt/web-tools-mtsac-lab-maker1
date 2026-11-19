@@ -4,10 +4,12 @@ import {
   LabBlock,
   LabDocument,
   LayoutProfile,
+  PageSetup,
   ReusableModule,
   WorkspaceState,
 } from '../types/lab';
 import { buildVariableMap, resolveVariables } from './variables';
+import { computePageGeometry, resolvePageSetup } from './pageGeometry';
 
 function escapeHtml(str: string): string {
   return str
@@ -204,11 +206,14 @@ export function generateStandaloneHtml(params: {
   lab: LabDocument;
   course?: Course;
   layout: LayoutProfile;
+  pageSetup?: PageSetup;
   globalVariables: Record<string, string>;
   modules: ReusableModule[];
   audience: AudienceMode;
 }): string {
-  const { lab, course, layout, globalVariables, modules, audience } = params;
+  const { lab, course, layout, pageSetup, globalVariables, modules, audience } = params;
+  const effectiveSetup = pageSetup || resolvePageSetup(layout, lab);
+  const geom = computePageGeometry(effectiveSetup);
   const vars = buildVariableMap(globalVariables, course, lab);
   const bodyFont =
     layout.fontFamily === 'serif'
@@ -292,10 +297,11 @@ export function generateStandaloneHtml(params: {
       line-height: 1.6;
     }
     .sheet {
-      max-width: 816px;
+      max-width: ${geom.widthPx}px;
+      min-height: ${geom.heightPx}px;
       margin: 0 auto;
       background: #ffffff;
-      padding: 56px 64px;
+      padding: ${geom.marginTopPx}px ${geom.marginRightPx}px ${geom.marginBottomPx}px ${geom.marginLeftPx}px;
       border: 1px solid #e2e8f0;
       box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
     }
@@ -384,8 +390,12 @@ export function generateStandaloneHtml(params: {
     .page-break { page-break-after: always; break-after: page; height: 1px; }
     .doc-footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; display: flex; justify-content: space-between; }
     @media print {
+      @page {
+        size: ${geom.cssAtPageSize};
+        margin: ${effectiveSetup.margins.top}in ${effectiveSetup.margins.right}in ${effectiveSetup.margins.bottom}in ${effectiveSetup.margins.left}in;
+      }
       body { background: #ffffff; padding: 0; }
-      .sheet { box-shadow: none; border: none; padding: 0; max-width: none; }
+      .sheet { box-shadow: none; border: none; padding: 0; max-width: none; min-height: auto; }
       .copy-btn { display: none; }
     }
   </style>

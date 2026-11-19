@@ -16,6 +16,27 @@ export type StepStyle = 'numbered' | 'stepped' | 'minimal';
 
 export type DensityChoice = 'comfortable' | 'compact';
 
+export type PageSizeId = 'letter' | 'a4' | 'legal' | 'a5' | 'tabloid';
+
+export type PageOrientation = 'portrait' | 'landscape';
+
+export type MarginPreset = 'narrow' | 'moderate' | 'normal' | 'wide' | 'custom';
+
+export interface PageMargins {
+  top: number; // inches
+  right: number; // inches
+  bottom: number; // inches
+  left: number; // inches
+}
+
+export interface PageSetup {
+  size: PageSizeId;
+  orientation: PageOrientation;
+  marginPreset: MarginPreset;
+  margins: PageMargins;
+  showRunningHeader: boolean;
+}
+
 export interface LayoutProfile {
   id: string;
   name: string;
@@ -28,6 +49,7 @@ export interface LayoutProfile {
   density: DensityChoice;
   showPageNumbers: boolean;
   footerTemplate: string;
+  pageSetup?: PageSetup;
 }
 
 export interface StepItem {
@@ -146,6 +168,7 @@ export interface LabSnapshotState {
   estimatedTime: string;
   layoutProfileId: string;
   layoutOverrideId?: string | null;
+  pageSetupOverride?: PageSetup | null;
   blocks: LabBlock[];
 }
 
@@ -169,6 +192,8 @@ export interface LabDocument {
   layoutProfileId: string;
   /** Optional per-document override; when unset, inherits Course.defaultLayoutId */
   layoutOverrideId?: string | null;
+  /** Optional per-document page setup override; when unset, inherits LayoutProfile.pageSetup */
+  pageSetupOverride?: PageSetup | null;
   blocks: LabBlock[];
   snapshots: LabSnapshot[];
   updatedAt: string;

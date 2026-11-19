@@ -30,26 +30,26 @@ const GROUPS: Array<{
   }>;
 }> = [
   {
-    title: 'Writing',
+    title: 'Text',
     items: [
-      { type: 'heading', label: 'Section Heading', hint: 'Title or subheading', icon: Heading2 },
-      { type: 'paragraph', label: 'Paragraph', hint: 'Instructions or overview', icon: Type },
-      { type: 'callout', label: 'Callout Note', hint: 'Tip, caution, or prerequisite', icon: AlertCircle },
+      { type: 'heading', label: 'Heading', hint: 'Section title', icon: Heading2 },
+      { type: 'paragraph', label: 'Text', hint: 'Paragraph copy', icon: Type },
+      { type: 'callout', label: 'Note', hint: 'Tip or caution', icon: AlertCircle },
     ],
   },
   {
-    title: 'Instructions',
+    title: 'Lab Guide',
     items: [
-      { type: 'steps', label: 'Numbered Steps', hint: 'Auto-numbered procedure', icon: ListOrdered },
-      { type: 'code', label: 'Code / Command', hint: 'Snippet + expected output', icon: Code2 },
-      { type: 'checklist', label: 'Checklist', hint: 'Setup or verification list', icon: CheckSquare },
+      { type: 'steps', label: 'Steps', hint: 'Numbered guide', icon: ListOrdered },
+      { type: 'code', label: 'Code', hint: 'Snippet & output', icon: Code2 },
+      { type: 'checklist', label: 'Checklist', hint: 'Checkboxes', icon: CheckSquare },
     ],
   },
   {
-    title: 'Homework & Grading',
+    title: 'Homework',
     items: [
-      { type: 'response', label: 'Question & Answer Key', hint: 'Points + student answer lines', icon: MessageSquareText },
-      { type: 'table', label: 'Table / Rubric', hint: 'Data grid or grading table', icon: Table2 },
+      { type: 'response', label: 'Question', hint: 'Prompt & key', icon: MessageSquareText },
+      { type: 'table', label: 'Table', hint: 'Grid or rubric', icon: Table2 },
     ],
   },
 ];
@@ -86,7 +86,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 rounded-md shadow-2xs transition-colors cursor-pointer"
           >
             <Plus className="w-3 h-3" />
-            Add here
+            Add
           </button>
           <span className="flex-1 h-px bg-blue-200/80" />
         </div>
@@ -97,7 +97,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
           className="w-full py-3 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-700 border border-dashed border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-md transition-colors cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
-          Add Section
+          Add Block
         </button>
       )}
 
@@ -109,7 +109,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
         >
           <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
             <span className="text-xs font-semibold text-slate-800">
-              {showModules ? 'Insert Linked Module' : 'Add Section to Page'}
+              {showModules ? 'Insert Shared Module' : 'Insert Block'}
             </span>
             <div className="flex items-center gap-2">
               {showModules && (
@@ -196,10 +196,10 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
                     <Layers className="w-3.5 h-3.5 text-teal-700 mt-0.5 shrink-0" />
                     <div className="min-w-0">
                       <div className="text-xs font-medium text-slate-900 leading-tight">
-                        Linked Module
+                        Shared Module
                       </div>
                       <div className="text-[11px] text-slate-500 truncate">
-                        Reuse synced course section
+                        Synced course block
                       </div>
                     </div>
                   </button>

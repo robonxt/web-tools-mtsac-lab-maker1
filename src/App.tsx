@@ -8,6 +8,7 @@ import {
   LabDocument,
   LabSnapshot,
   LayoutProfile,
+  PageSetup,
   ReusableModule,
   SetupSection,
   WorkspaceState,
@@ -23,15 +24,16 @@ import {
   LabTemplateKind,
 } from './lib/blockFactory';
 import { buildVariableMap } from './lib/variables';
+import { resolvePageSetup } from './lib/pageGeometry';
 import {
   exportWorkspaceJson,
   generateStandaloneHtml,
   slugifyFilename,
   triggerFileDownload,
 } from './lib/exporter';
-import { TopBar } from './components/TopBar';
+import { LeftDrawerMode, WorkspaceBar } from './components/WorkspaceBar';
 import { Sidebar } from './components/Sidebar';
-import { EditorToolbar } from './components/EditorToolbar';
+import { InsertDrawer } from './components/InsertDrawer';
 import { PaperCanvas } from './components/PaperCanvas';
 import { DetailsDrawer } from './components/DetailsDrawer';
 import { CourseSetupView } from './components/CourseSetupView';
@@ -48,6 +50,7 @@ export default function App() {
     workspaceRepository.load(createSeedWorkspace)
   );
   const [history, setHistory] = useState<WorkspaceState[]>([]);
+  const [future, setFuture] = useState<WorkspaceState[]>([]);
 
   const [activeView, setActiveView] = useState<WorkspaceView>('editor');
   const [setupSection, setSetupSection] = useState<SetupSection>('layouts');
@@ -55,9 +58,10 @@ export default function App() {
   const [printEdition, setPrintEdition] = useState<AudienceMode>('student');
   const [showRawTokens, setShowRawTokens] = useState(false);
   const [zoom, setZoom] = useState(100);
+  const [pageCount, setPageCount] = useState(1);
 
-  // Calm Google Docs defaults: drawers start closed so the paper sheet owns the canvas
-  const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
+  // Calm Google Docs defaults: drawers start closed so the paper sheets own the canvas
+  const [leftDrawer, setLeftDrawer] = useState<LeftDrawerMode>('none');
   const [showDetailsDrawer, setShowDetailsDrawer] = useState(false);
 
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -91,40 +95,77 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [workspace]);
 
+  const workspaceRef = useRef<WorkspaceState>(workspace);
+  workspaceRef.current = workspace;
+
   const commitWorkspace = useCallback(
     (updater: (prev: WorkspaceState) => WorkspaceState, recordHistory = true) => {
-      setWorkspace((prev) => {
-        if (recordHistory) {
-          setHistory((h) => [...h.slice(-24), prev]);
-        }
-        return updater(prev);
-      });
+      const current = workspaceRef.current;
+      const next = updater(current);
+      if (recordHistory) {
+        setHistory((h) => [...h.slice(-24), current]);
+        setFuture([]);
+      }
+      setWorkspace(next);
     },
     []
   );
 
   const handleUndo = useCallback(() => {
-    setHistory((prev) => {
-      if (prev.length === 0) return prev;
-      const last = prev[prev.length - 1];
-      setWorkspace(last);
-      showToast('Undid last change');
-      return prev.slice(0, -1);
-    });
-  }, [showToast]);
+    if (history.length === 0) return;
+    const previous = history[history.length - 1];
+    const current = workspaceRef.current;
+    setHistory((h) => h.slice(0, -1));
+    setFuture((f) => [current, ...f.slice(0, 24)]);
+    setWorkspace(previous);
+    showToast('Undid last change');
+  }, [history, showToast]);
+
+  const handleRedo = useCallback(() => {
+    if (future.length === 0) return;
+    const next = future[0];
+    const current = workspaceRef.current;
+    setFuture((f) => f.slice(1));
+    setHistory((h) => [...h.slice(-24), current]);
+    setWorkspace(next);
+    showToast('Redid change');
+  }, [future, showToast]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+
+      if (key === 's') {
         e.preventDefault();
         workspaceRepository.save(workspace);
         setSavedLabel('Saved');
         showToast('Saved to browser storage');
+        return;
+      }
+
+      // Let native browser text undo/redo work when typing inside an input or textarea
+      const activeTag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+        return;
+      }
+
+      if (key === 'z' && !e.shiftKey) {
+        if (history.length > 0) {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        if (future.length > 0) {
+          e.preventDefault();
+          handleRedo();
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [workspace, showToast]);
+  }, [workspace, history.length, future.length, handleUndo, handleRedo, showToast]);
 
   const activeLab = useMemo(
     () => workspace.labs.find((l) => l.id === workspace.activeLabId) || workspace.labs[0],
@@ -148,23 +189,24 @@ export default function App() {
     );
   }, [workspace.layoutProfiles, activeCourse, activeLab]);
 
+  const activePageSetup = useMemo(
+    () => resolvePageSetup(activeLayout, activeLab),
+    [activeLayout, activeLab]
+  );
+
   const resolvedVariables = useMemo(
     () => buildVariableMap(workspace.globalVariables, activeCourse, activeLab),
     [workspace.globalVariables, activeCourse, activeLab]
-  );
-
-  const instructorHiddenCount = useMemo(
-    () =>
-      activeLab
-        ? activeLab.blocks.filter((b) => b.audience === 'instructor').length
-        : 0,
-    [activeLab]
   );
 
   const openSetupSection = useCallback((section: SetupSection, modId?: string | null) => {
     if (modId !== undefined) setFocusedModuleId(modId);
     setSetupSection(section);
     setActiveView('setup');
+  }, []);
+
+  const toggleLeftDrawer = useCallback((mode: Exclude<LeftDrawerMode, 'none'>) => {
+    setLeftDrawer((prev) => (prev === mode ? 'none' : mode));
   }, []);
 
   /* ----------------------------- Lab Operations ----------------------------- */
@@ -194,6 +236,35 @@ export default function App() {
     [activeLab, updateLabById]
   );
 
+  const handleChangePageSetupForDoc = useCallback(
+    (next: PageSetup | null) => {
+      updateActiveLab((lab) => ({ ...lab, pageSetupOverride: next }));
+    },
+    [updateActiveLab]
+  );
+
+  const handleSavePageSetupToLayout = useCallback(
+    (next: PageSetup) => {
+      if (!activeLayout) return;
+      commitWorkspace((prev) => ({
+        ...prev,
+        layoutProfiles: prev.layoutProfiles.map((p) =>
+          p.id === activeLayout.id ? { ...p, pageSetup: next } : p
+        ),
+        labs: prev.labs.map((l) =>
+          l.id === activeLab?.id ? { ...l, pageSetupOverride: null } : l
+        ),
+      }));
+      showToast(`Saved page setup to "${activeLayout.name}"`);
+    },
+    [activeLayout, activeLab?.id, commitWorkspace, showToast]
+  );
+
+  const handleResetPageSetupOverride = useCallback(() => {
+    updateActiveLab((lab) => ({ ...lab, pageSetupOverride: null }));
+    showToast('Reset page setup to course layout default');
+  }, [updateActiveLab, showToast]);
+
   const handleInsertBlockAt = useCallback(
     (index: number, type: LabBlockType, moduleId?: string) => {
       if (!activeLab) return;
@@ -212,6 +283,35 @@ export default function App() {
       }, 60);
     },
     [activeLab, updateActiveLab]
+  );
+
+  const handleSmartInsert = useCallback(
+    (type: LabBlockType, moduleId?: string) => {
+      if (!activeLab) return;
+      const selectedIdx = selectedBlockId
+        ? activeLab.blocks.findIndex((b) => b.id === selectedBlockId)
+        : -1;
+      const targetIdx = selectedIdx >= 0 ? selectedIdx + 1 : activeLab.blocks.length;
+      handleInsertBlockAt(targetIdx, type, moduleId);
+    },
+    [activeLab, selectedBlockId, handleInsertBlockAt]
+  );
+
+  const handleReorderBlock = useCallback(
+    (blockId: string, targetIndex: number) => {
+      updateActiveLab((lab) => {
+        const fromIdx = lab.blocks.findIndex((b) => b.id === blockId);
+        if (fromIdx < 0) return lab;
+        const blocks = [...lab.blocks];
+        const [moved] = blocks.splice(fromIdx, 1);
+        const adjustedTarget = fromIdx < targetIndex ? targetIndex - 1 : targetIndex;
+        const safeIdx = Math.max(0, Math.min(adjustedTarget, blocks.length));
+        if (safeIdx === fromIdx) return lab;
+        blocks.splice(safeIdx, 0, moved);
+        return { ...lab, blocks };
+      });
+    },
+    [updateActiveLab]
   );
 
   const handleUpdateBlock = useCallback(
@@ -324,7 +424,7 @@ export default function App() {
     setNewLabCourseId(null);
     setSelectedBlockId(null);
     setActiveView('editor');
-    setShowDocumentsDrawer(false);
+    setLeftDrawer('none');
     showToast(`Created ${newLab.labNumber}: ${newLab.title}`);
   };
 
@@ -413,6 +513,7 @@ export default function App() {
           estimatedTime: targetLab.estimatedTime,
           layoutProfileId: targetLab.layoutProfileId,
           layoutOverrideId: targetLab.layoutOverrideId ?? null,
+          pageSetupOverride: targetLab.pageSetupOverride ?? null,
           blocks: targetLab.blocks,
         })
       ),
@@ -443,6 +544,7 @@ export default function App() {
           estimatedTime: targetLab.estimatedTime,
           layoutProfileId: targetLab.layoutProfileId,
           layoutOverrideId: targetLab.layoutOverrideId ?? null,
+          pageSetupOverride: targetLab.pageSetupOverride ?? null,
           blocks: targetLab.blocks,
         })
       ),
@@ -457,6 +559,7 @@ export default function App() {
       estimatedTime: snapshot.state.estimatedTime,
       layoutProfileId: snapshot.state.layoutProfileId,
       layoutOverrideId: snapshot.state.layoutOverrideId ?? null,
+      pageSetupOverride: snapshot.state.pageSetupOverride ?? null,
       blocks: JSON.parse(JSON.stringify(snapshot.state.blocks)),
       snapshots: [safetyBackup, ...lab.snapshots],
     }));
@@ -497,6 +600,7 @@ export default function App() {
       lab: activeLab,
       course: activeCourse,
       layout: activeLayout,
+      pageSetup: activePageSetup,
       globalVariables: workspace.globalVariables,
       modules: workspace.modules,
       audience: edition,
@@ -531,110 +635,132 @@ export default function App() {
   return (
     <>
       <div className="screen-only-app h-screen w-screen overflow-hidden flex flex-col bg-[#F1F5F9]">
-        <TopBar
-          activeView={activeView}
-          onChangeView={setActiveView}
-          onOpenExport={() => setShowExportModal(true)}
-        />
+        {activeLab && activeLayout && (
+          <WorkspaceBar
+            activeView={activeView}
+            onChangeView={setActiveView}
+            setupSection={setupSection}
+            onChangeSetupSection={setSetupSection}
+            courseCode={activeCourse?.code}
+            labNumber={activeLab.labNumber}
+            labTitle={activeLab.title}
+            savedLabel={savedLabel}
+            leftDrawer={leftDrawer}
+            onToggleLeftDrawer={toggleLeftDrawer}
+            showSettingsDrawer={showDetailsDrawer}
+            onToggleSettingsDrawer={() => setShowDetailsDrawer((v) => !v)}
+            canUndo={history.length > 0}
+            onUndo={handleUndo}
+            canRedo={future.length > 0}
+            onRedo={handleRedo}
+            pageSetup={activePageSetup}
+            pageCount={pageCount}
+            hasPageSetupOverride={Boolean(activeLab.pageSetupOverride)}
+            onChangePageSetupForDoc={handleChangePageSetupForDoc}
+            onSavePageSetupToLayout={handleSavePageSetupToLayout}
+            onResetPageSetupOverride={handleResetPageSetupOverride}
+            zoom={zoom}
+            onChangeZoom={setZoom}
+            audienceMode={audienceMode}
+            onChangeAudience={setAudienceMode}
+            onQuickPrint={() => handlePrintPdf(audienceMode)}
+            onOpenExport={() => setShowExportModal(true)}
+          />
+        )}
 
         {/* Workspace Content Area */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {activeView === 'editor' && activeLab && activeLayout && (
-            <>
-              <EditorToolbar
-                courseCode={activeCourse?.code}
-                labNumber={activeLab.labNumber}
-                labTitle={activeLab.title}
+            <div className="flex-1 flex min-h-0 overflow-hidden relative">
+              {/* On-Demand Left Drawer Slot: Files OR Drag-and-Drop Insert Palette */}
+              {leftDrawer === 'files' && (
+                <Sidebar
+                  courses={workspace.courses}
+                  labs={workspace.labs}
+                  modules={workspace.modules}
+                  activeLabId={activeLab.id}
+                  onSelectLab={(id) => {
+                    commitWorkspace((prev) => ({ ...prev, activeLabId: id }), false);
+                    setSelectedBlockId(null);
+                  }}
+                  onOpenNewLab={(cid) =>
+                    setNewLabCourseId(
+                      cid || activeLab.courseId || workspace.courses[0]?.id || ''
+                    )
+                  }
+                  onOpenNewCourse={() => setShowNewCourseModal(true)}
+                  onDuplicateLab={handleDuplicateLab}
+                  onDeleteLab={handleDeleteLab}
+                  onJumpToBlock={(blockId) => {
+                    setSelectedBlockId(blockId);
+                    document
+                      .getElementById(`block-${blockId}`)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  onClose={() => setLeftDrawer('none')}
+                />
+              )}
+
+              {leftDrawer === 'insert' && (
+                <InsertDrawer
+                  modules={workspace.modules}
+                  onInsert={handleSmartInsert}
+                  onManageModules={() => openSetupSection('modules')}
+                  onClose={() => setLeftDrawer('none')}
+                />
+              )}
+
+              {/* Centered Multi-Page WYSIWYG Paper Canvas */}
+              <PaperCanvas
+                lab={activeLab}
+                course={activeCourse}
+                layout={activeLayout}
+                pageSetup={activePageSetup}
                 audienceMode={audienceMode}
-                onChangeAudience={setAudienceMode}
-                showDocumentsDrawer={showDocumentsDrawer}
-                onToggleDocumentsDrawer={() => setShowDocumentsDrawer((v) => !v)}
-                showDetailsDrawer={showDetailsDrawer}
-                onToggleDetailsDrawer={() => setShowDetailsDrawer((v) => !v)}
-                canUndo={history.length > 0}
-                onUndo={handleUndo}
-                instructorHiddenCount={instructorHiddenCount}
-                savedLabel={savedLabel}
+                variables={resolvedVariables}
+                showRawTokens={showRawTokens}
+                modules={workspace.modules}
+                selectedBlockId={selectedBlockId}
+                zoom={zoom}
+                onPageCountChange={setPageCount}
+                onSelectBlock={setSelectedBlockId}
+                onUpdateLabMeta={(patch) =>
+                  updateActiveLab((lab) => ({ ...lab, ...patch }), false)
+                }
+                onUpdateBlock={handleUpdateBlock}
+                onMoveBlock={handleMoveBlock}
+                onDuplicateBlock={handleDuplicateBlock}
+                onDeleteBlock={handleDeleteBlock}
+                onInsertBlockAt={handleInsertBlockAt}
+                onReorderBlock={handleReorderBlock}
+                onEditMasterModule={(moduleId) => openSetupSection('modules', moduleId)}
+                onDetachModule={handleDetachModule}
               />
 
-              <div className="flex-1 flex min-h-0 overflow-hidden relative">
-                {/* On-Demand Left Documents Drawer */}
-                {showDocumentsDrawer && (
-                  <Sidebar
-                    courses={workspace.courses}
-                    labs={workspace.labs}
-                    modules={workspace.modules}
-                    activeLabId={activeLab.id}
-                    onSelectLab={(id) => {
-                      commitWorkspace((prev) => ({ ...prev, activeLabId: id }), false);
-                      setSelectedBlockId(null);
-                    }}
-                    onOpenNewLab={(cid) =>
-                      setNewLabCourseId(
-                        cid || activeLab.courseId || workspace.courses[0]?.id || ''
-                      )
-                    }
-                    onOpenNewCourse={() => setShowNewCourseModal(true)}
-                    onDuplicateLab={handleDuplicateLab}
-                    onDeleteLab={handleDeleteLab}
-                    onJumpToBlock={(blockId) => {
-                      setSelectedBlockId(blockId);
-                      document
-                        .getElementById(`block-${blockId}`)
-                        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }}
-                    onClose={() => setShowDocumentsDrawer(false)}
-                  />
-                )}
-
-                {/* Centered Distraction-Free Paper Canvas */}
-                <PaperCanvas
+              {/* On-Demand Right Document Settings Drawer */}
+              {showDetailsDrawer && (
+                <DetailsDrawer
                   lab={activeLab}
-                  course={activeCourse}
-                  layout={activeLayout}
-                  audienceMode={audienceMode}
-                  variables={resolvedVariables}
+                  courses={workspace.courses}
+                  layoutProfiles={workspace.layoutProfiles}
+                  effectiveLayout={activeLayout}
+                  effectivePageSetup={activePageSetup}
                   showRawTokens={showRawTokens}
-                  modules={workspace.modules}
-                  selectedBlockId={selectedBlockId}
-                  zoom={zoom}
-                  onSelectBlock={setSelectedBlockId}
-                  onUpdateLabMeta={(patch) =>
-                    updateActiveLab((lab) => ({ ...lab, ...patch }), false)
+                  onToggleRawTokens={() => setShowRawTokens((v) => !v)}
+                  onUpdateLab={(patch) => updateActiveLab((lab) => ({ ...lab, ...patch }))}
+                  onUpdatePageSetup={handleChangePageSetupForDoc}
+                  onSavePageSetupToLayout={handleSavePageSetupToLayout}
+                  onCreateSnapshot={(sem, lbl, note) =>
+                    handleCreateSnapshotForLab(activeLab.id, sem, lbl, note)
                   }
-                  onUpdateBlock={handleUpdateBlock}
-                  onMoveBlock={handleMoveBlock}
-                  onDuplicateBlock={handleDuplicateBlock}
-                  onDeleteBlock={handleDeleteBlock}
-                  onInsertBlockAt={handleInsertBlockAt}
-                  onEditMasterModule={(moduleId) => openSetupSection('modules', moduleId)}
-                  onDetachModule={handleDetachModule}
+                  onOpenSnapshotDiff={(snap) =>
+                    setActiveDiff({ labId: activeLab.id, snapshot: snap })
+                  }
+                  onOpenCourseSetup={(sec) => openSetupSection(sec)}
+                  onClose={() => setShowDetailsDrawer(false)}
                 />
-
-                {/* On-Demand Right Details Drawer */}
-                {showDetailsDrawer && (
-                  <DetailsDrawer
-                    lab={activeLab}
-                    courses={workspace.courses}
-                    layoutProfiles={workspace.layoutProfiles}
-                    effectiveLayout={activeLayout}
-                    showRawTokens={showRawTokens}
-                    onToggleRawTokens={() => setShowRawTokens((v) => !v)}
-                    zoom={zoom}
-                    onChangeZoom={setZoom}
-                    onUpdateLab={(patch) => updateActiveLab((lab) => ({ ...lab, ...patch }))}
-                    onCreateSnapshot={(sem, lbl, note) =>
-                      handleCreateSnapshotForLab(activeLab.id, sem, lbl, note)
-                    }
-                    onOpenSnapshotDiff={(snap) =>
-                      setActiveDiff({ labId: activeLab.id, snapshot: snap })
-                    }
-                    onOpenCourseSetup={(sec) => openSetupSection(sec)}
-                    onClose={() => setShowDetailsDrawer(false)}
-                  />
-                )}
-              </div>
-            </>
+              )}
+            </div>
           )}
 
           {activeView === 'setup' && activeLab && activeLayout && (
@@ -803,6 +929,7 @@ export default function App() {
             lab={activeLab}
             course={activeCourse}
             layout={activeLayout}
+            pageSetup={activePageSetup}
             defaultAudience={audienceMode}
             onClose={() => setShowExportModal(false)}
             onPrintPdf={handlePrintPdf}
@@ -859,6 +986,7 @@ export default function App() {
         lab={activeLab}
         course={activeCourse}
         layout={activeLayout}
+        pageSetup={activePageSetup}
         globalVariables={workspace.globalVariables}
         modules={workspace.modules}
         audienceMode={printEdition}

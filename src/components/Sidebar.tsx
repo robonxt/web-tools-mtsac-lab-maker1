@@ -102,13 +102,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-[280px] shrink-0 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
       {/* Drawer Header */}
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-900">Courses &amp; Documents</span>
+        <span className="text-xs font-semibold text-slate-900">Files</span>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close documents drawer"
-            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+            aria-label="Close files drawer"
+            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -138,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-800 bg-slate-100 hover:bg-slate-200/80 rounded-md transition-colors whitespace-nowrap cursor-pointer"
           >
             <FilePlus2 className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
-            New Sheet
+            New Doc
           </button>
           <button
             type="button"

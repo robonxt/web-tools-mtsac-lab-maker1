@@ -12,6 +12,8 @@ import {
 } from '../types/lab';
 import { createId } from '../lib/blockFactory';
 import { buildVariableMap } from '../lib/variables';
+import { DEFAULT_PAGE_SETUP, formatPageSetupSummary } from '../lib/pageGeometry';
+import { PageSetupControls } from './PageSetupControls';
 import { PaperCanvas } from './PaperCanvas';
 
 interface LayoutsViewProps {
@@ -49,9 +51,11 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
   const [selectedId, setSelectedId] = useState<string>(
     activeLab.layoutOverrideId || activeCourse?.defaultLayoutId || layoutProfiles[0]?.id || ''
   );
+  const [previewZoom, setPreviewZoom] = useState<number>(80);
 
   const selected =
     layoutProfiles.find((p) => p.id === selectedId) || layoutProfiles[0];
+  const selectedPageSetup = selected?.pageSetup || DEFAULT_PAGE_SETUP;
   const previewVariables = buildVariableMap(globalVariables, activeCourse, activeLab);
 
   const handleNewProfile = () => {
@@ -67,6 +71,7 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
       density: 'comfortable',
       showPageNumbers: true,
       footerTemplate: '{{course_code}} · {{lab_number}} · {{semester}}',
+      pageSetup: { ...DEFAULT_PAGE_SETUP, margins: { ...DEFAULT_PAGE_SETUP.margins } },
     };
     onCreateLayout(profile);
     setSelectedId(profile.id);
@@ -359,33 +364,67 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
               className="w-full font-mono text-[11px] text-slate-800 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
-        </div>
-      </aside>
 
-      {/* Live Paper Preview */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between text-xs text-slate-600">
-          <span>
-            Live Preview — <strong className="text-slate-900">{activeLab.labNumber}: {activeLab.title}</strong> rendered with <strong className="text-slate-900">{selected.name}</strong>
-          </span>
-          <span className="text-slate-400">Read-only layout preview</span>
-        </div>
-        <div className="flex-1 overflow-y-auto p-8 bg-[#F1F5F9]">
-          <div className="max-w-[780px] mx-auto bg-white border border-slate-200 shadow-sm px-12 py-10">
-            <PaperCanvas
-              lab={activeLab}
-              course={activeCourse}
-              layout={selected}
-              audienceMode="student"
-              variables={previewVariables}
-              showRawTokens={false}
-              modules={modules}
-              selectedBlockId={null}
-              zoom={100}
-              readOnly={true}
+          {/* Default Page Setup */}
+          <div className="pt-4 border-t border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-700">
+                Default Paper &amp; Margins
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {formatPageSetupSummary(selectedPageSetup)}
+              </span>
+            </div>
+            <PageSetupControls
+              value={selectedPageSetup}
+              onChange={(ps) => onUpdateLayout({ ...selected, pageSetup: ps })}
+              compact
             />
           </div>
         </div>
+      </aside>
+
+      {/* Live Multi-Page Paper Preview */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between gap-4 text-xs text-slate-600 shrink-0">
+          <span className="truncate">
+            Live Preview — <strong className="text-slate-900">{activeLab.labNumber}: {activeLab.title}</strong> rendered with <strong className="text-slate-900">{selected.name}</strong>
+          </span>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-slate-400 hidden lg:inline">
+              {formatPageSetupSummary(selectedPageSetup)}
+            </span>
+            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-md">
+              {[70, 80, 100].map((z) => (
+                <button
+                  key={z}
+                  type="button"
+                  onClick={() => setPreviewZoom(z)}
+                  className={`px-2 py-0.5 text-[11px] font-mono tabular-nums rounded cursor-pointer ${
+                    previewZoom === z
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {z}%
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <PaperCanvas
+          lab={activeLab}
+          course={activeCourse}
+          layout={selected}
+          pageSetup={selectedPageSetup}
+          audienceMode="student"
+          variables={previewVariables}
+          showRawTokens={false}
+          modules={modules}
+          selectedBlockId={null}
+          zoom={previewZoom}
+          readOnly={true}
+        />
       </div>
     </div>
   );

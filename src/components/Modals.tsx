@@ -15,10 +15,12 @@ import {
   LabDocument,
   LabSnapshot,
   LayoutProfile,
+  PageSetup,
   ReusableModule,
 } from '../types/lab';
 import { LabTemplateKind } from '../lib/blockFactory';
 import { diffSnapshotWithCurrent } from '../lib/diff';
+import { formatPageSetupSummary } from '../lib/pageGeometry';
 
 /* -------------------------------------------------------------------------- */
 /*                                Export Modal                                */
@@ -28,6 +30,7 @@ interface ExportModalProps {
   lab: LabDocument;
   course?: Course;
   layout: LayoutProfile;
+  pageSetup: PageSetup;
   defaultAudience: AudienceMode;
   onClose: () => void;
   onPrintPdf: (edition: AudienceMode) => void;
@@ -40,6 +43,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   lab,
   course,
   layout,
+  pageSetup,
   defaultAudience,
   onClose,
   onPrintPdf,
@@ -138,7 +142,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 Print / Save as PDF
               </span>
               <span className="text-xs text-slate-500">
-                Vector-crisp US Letter print layout with clean page breaks
+                Vector-crisp {formatPageSetupSummary(pageSetup)} print layout matching editor pages
               </span>
             </button>
 

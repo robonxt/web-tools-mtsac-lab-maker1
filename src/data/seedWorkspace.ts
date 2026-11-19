@@ -24,6 +24,13 @@ export function createSeedWorkspace(): WorkspaceState {
         density: 'comfortable',
         showPageNumbers: true,
         footerTemplate: '{{course_code}} · {{lab_number}} · {{semester}} · {{professor}}',
+        pageSetup: {
+          size: 'letter',
+          orientation: 'portrait',
+          marginPreset: 'moderate',
+          margins: { top: 0.75, right: 0.65, bottom: 0.75, left: 0.65 },
+          showRunningHeader: true,
+        },
       },
       {
         id: 'layout_chen_academic',
@@ -37,6 +44,13 @@ export function createSeedWorkspace(): WorkspaceState {
         density: 'comfortable',
         showPageNumbers: true,
         footerTemplate: '{{institution}} — {{course_code}} ({{semester}})',
+        pageSetup: {
+          size: 'letter',
+          orientation: 'portrait',
+          marginPreset: 'normal',
+          margins: { top: 1.0, right: 1.0, bottom: 1.0, left: 1.0 },
+          showRunningHeader: true,
+        },
       },
       {
         id: 'layout_nair_worksheet',
@@ -50,6 +64,13 @@ export function createSeedWorkspace(): WorkspaceState {
         density: 'compact',
         showPageNumbers: true,
         footerTemplate: '{{course_code}} Worksheet · {{lab_number}} · Due {{due_day}}',
+        pageSetup: {
+          size: 'letter',
+          orientation: 'portrait',
+          marginPreset: 'narrow',
+          margins: { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 },
+          showRunningHeader: false,
+        },
       },
     ],
     courses: [

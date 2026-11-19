@@ -1,23 +1,26 @@
 import React, { useMemo, useState } from 'react';
-import { GitCompare, Plus, X } from 'lucide-react';
+import { GitCompare, Plus, RotateCcw, X } from 'lucide-react';
 import {
   Course,
   DocKind,
   LabDocument,
   LabSnapshot,
   LayoutProfile,
+  PageSetup,
 } from '../types/lab';
+import { PageSetupControls } from './PageSetupControls';
 
 interface DetailsDrawerProps {
   lab: LabDocument;
   courses: Course[];
   layoutProfiles: LayoutProfile[];
   effectiveLayout: LayoutProfile;
+  effectivePageSetup: PageSetup;
   showRawTokens: boolean;
   onToggleRawTokens: () => void;
-  zoom: number;
-  onChangeZoom: (z: number) => void;
   onUpdateLab: (patch: Partial<LabDocument>) => void;
+  onUpdatePageSetup: (next: PageSetup | null) => void;
+  onSavePageSetupToLayout: (next: PageSetup) => void;
   onCreateSnapshot: (semester: string, label: string, note: string) => void;
   onOpenSnapshotDiff: (snapshot: LabSnapshot) => void;
   onOpenCourseSetup: (section: 'layouts' | 'variables' | 'modules' | 'snapshots') => void;
@@ -35,11 +38,12 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
   courses,
   layoutProfiles,
   effectiveLayout,
+  effectivePageSetup,
   showRawTokens,
   onToggleRawTokens,
-  zoom,
-  onChangeZoom,
   onUpdateLab,
+  onUpdatePageSetup,
+  onSavePageSetupToLayout,
   onCreateSnapshot,
   onOpenSnapshotDiff,
   onOpenCourseSetup,
@@ -49,6 +53,7 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
   const inheritedLayout =
     layoutProfiles.find((p) => p.id === course?.defaultLayoutId) || layoutProfiles[0];
   const hasOverride = Boolean(lab.layoutOverrideId);
+  const hasPageOverride = Boolean(lab.pageSetupOverride);
 
   const [showSnapForm, setShowSnapForm] = useState(false);
   const [snapSemester, setSnapSemester] = useState(course?.semester || 'Fall 2026');
@@ -72,12 +77,12 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
   return (
     <aside className="w-[320px] shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-900">Document Details</span>
+        <span className="text-xs font-semibold text-slate-900">Document Settings</span>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close details drawer"
-          className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+          aria-label="Close document settings"
+          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -205,6 +210,41 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
           )}
         </section>
 
+        {/* Paper Size, Orientation & Margins */}
+        <section className="pt-4 border-t border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Page Setup</span>
+            {hasPageOverride ? (
+              <button
+                type="button"
+                onClick={() => onUpdatePageSetup(null)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset to layout
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-400">From layout</span>
+            )}
+          </div>
+
+          <PageSetupControls
+            value={effectivePageSetup}
+            onChange={(next) => onUpdatePageSetup(next)}
+            compact
+          />
+
+          {hasPageOverride && (
+            <button
+              type="button"
+              onClick={() => onSavePageSetupToLayout(effectivePageSetup)}
+              className="w-full py-1.5 px-2.5 text-[11px] font-medium text-blue-700 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/80 rounded-md transition-colors cursor-pointer"
+            >
+              Save as default for {effectiveLayout.name}
+            </button>
+          )}
+        </section>
+
         {/* Quick Semester Snapshots */}
         <section className="pt-4 border-t border-slate-200 space-y-2.5">
           <div className="flex items-center justify-between">
@@ -296,25 +336,7 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
 
         {/* Quiet Viewing Options */}
         <section className="pt-4 border-t border-slate-200 space-y-3">
-          <span className="text-[11px] font-semibold text-slate-500">View Options</span>
-
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600">Page Zoom</span>
-            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-md">
-              {[85, 100, 115].map((z) => (
-                <button
-                  key={z}
-                  type="button"
-                  onClick={() => onChangeZoom(z)}
-                  className={`px-2 py-0.5 text-[11px] font-mono tabular-nums rounded cursor-pointer ${
-                    zoom === z ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {z}%
-                </button>
-              ))}
-            </div>
-          </div>
+          <span className="text-[11px] font-semibold text-slate-500">Options</span>
 
           <label className="flex items-center justify-between text-xs text-slate-600 cursor-pointer">
             <span>Highlight raw {`{{variable}}`} names</span>
