@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -21,7 +21,7 @@ import {
 } from '../types/lab';
 import { createId } from '../lib/blockFactory';
 import { resolveVariables } from '../lib/variables';
-import { writeDragPayload } from '../lib/dnd';
+import { clearActiveDrag, writeDragPayload } from '../lib/dnd';
 import { InlineRichText } from './InlineRichText';
 import { FormattedTextarea } from './FormattedTextarea';
 
@@ -96,9 +96,31 @@ export const BlockView: React.FC<BlockViewProps> = ({
   onEditMasterModule,
   onDetachModule,
 }) => {
-  // Hide instructor-only blocks in Student Handout view
   const checklistRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [isGripActive, setIsGripActive] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
+  // Safety cleanup if dragend/mouseup happens outside the grip element
+  useEffect(() => {
+    if (!isGripActive && !isDragging) return;
+    const handleEnd = () => {
+      setIsDragging(false);
+      setIsGripActive(false);
+    };
+    const handleMouseUp = () => {
+      if (!isDragging) setIsGripActive(false);
+    };
+    window.addEventListener('dragend', handleEnd);
+    window.addEventListener('drop', handleEnd);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('dragend', handleEnd);
+      window.removeEventListener('drop', handleEnd);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isGripActive, isDragging]);
+
+  // Hide instructor-only blocks in Student Handout view
   if (audienceMode === 'student' && block.audience === 'instructor') {
     return null;
   }
@@ -106,6 +128,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
   const isInstructorOnly = block.audience === 'instructor';
   const editing = !readOnly && isSelected;
   const compact = layout.density === 'compact';
+  const keepControlsInteractive = isSelected || isGripActive || isDragging;
 
   const renderInnerContent = () => {
     switch (block.type) {
@@ -1069,24 +1092,35 @@ export const BlockView: React.FC<BlockViewProps> = ({
         </div>
       )}
 
-      {/* Floating Block Controls cleanly above top border (with hover bridge so mouse transition stays open) */}
+      {/* Floating Block Controls cleanly above top border (never drops pointer events during an active drag) */}
       <div
         onClick={(e) => e.stopPropagation()}
         className={`absolute bottom-full right-0 pb-2 z-20 transition-opacity ${
-          isSelected
-            ? 'opacity-100'
-            : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
+          keepControlsInteractive
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
         }`}
       >
         <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-md shadow-sm px-1 py-0.5">
         <span
           draggable
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            setIsGripActive(true);
+          }}
           onDragStart={(e) => {
             e.stopPropagation();
+            setIsGripActive(true);
+            setIsDragging(true);
             writeDragPayload(e.dataTransfer, {
               kind: 'move-block',
               blockId: block.id,
             });
+          }}
+          onDragEnd={() => {
+            setIsDragging(false);
+            setIsGripActive(false);
+            clearActiveDrag();
           }}
           title="Drag to reorder"
           className="p-1 text-slate-400 hover:text-slate-800 cursor-grab active:cursor-grabbing"
@@ -1152,7 +1186,9 @@ export const BlockView: React.FC<BlockViewProps> = ({
         </div>
       </div>
 
-      {renderInnerContent()}
+      <div className={isDragging ? 'opacity-45 transition-opacity' : ''}>
+        {renderInnerContent()}
+      </div>
     </div>
   );
 };

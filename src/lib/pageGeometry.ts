@@ -204,6 +204,10 @@ export interface PaginatedEntry {
 export interface PaginatedPage {
   pageNumber: number;
   entries: PaginatedEntry[];
+  /** Exact index in lab.blocks where dropping at the start of this page (or onto this empty page) should insert */
+  insertStartIndex: number;
+  /** Exact index in lab.blocks where dropping at the end of this page (before any trailing pageBreak) should insert */
+  insertEndIndex: number;
   /** If a manual pageBreak block immediately ended this page, keep its reference so users can remove it */
   trailingBreak?: PaginatedEntry;
   overflowsSinglePage: boolean;
@@ -237,7 +241,8 @@ function estimateFallbackHeight(block: LabBlock): number {
 /**
  * Pure WYSIWYG block pagination engine.
  * Packs visible blocks onto exact physical pages using live measured pixel heights,
- * respecting manual Page Break blocks and header/footer heights.
+ * respecting manual Page Break blocks and header/footer heights, while recording
+ * exact lab.blocks slice offsets for multi-page drag-and-drop insertion.
  */
 export function paginateBlocks(params: {
   blocks: LabBlock[];
@@ -269,6 +274,8 @@ export function paginateBlocks(params: {
       {
         pageNumber: 1,
         entries: [],
+        insertStartIndex: blocks.length,
+        insertEndIndex: blocks.length,
         overflowsSinglePage: false,
       },
     ];
@@ -276,18 +283,32 @@ export function paginateBlocks(params: {
 
   const pages: PaginatedPage[] = [];
   let currentEntries: PaginatedEntry[] = [];
+  let pageStartIndex = 0;
   let usedHeight = headerHeightPx;
   let currentLimit = geometry.usableHeightFirstPagePx;
   let overflowsSinglePage = false;
 
-  const pushCurrentPage = (trailingBreak?: PaginatedEntry) => {
+  const pushCurrentPage = (trailingBreak?: PaginatedEntry, nextPageStart?: number) => {
+    const startIdx =
+      currentEntries.length > 0 ? currentEntries[0].originalIndex : pageStartIndex;
+    const endIdx = trailingBreak
+      ? trailingBreak.originalIndex
+      : currentEntries.length > 0
+        ? currentEntries[currentEntries.length - 1].originalIndex + 1
+        : pageStartIndex;
+
     pages.push({
       pageNumber: pages.length + 1,
       entries: currentEntries,
+      insertStartIndex: startIdx,
+      insertEndIndex: endIdx,
       trailingBreak,
       overflowsSinglePage,
     });
     currentEntries = [];
+    pageStartIndex = trailingBreak
+      ? trailingBreak.originalIndex + 1
+      : nextPageStart ?? endIdx;
     usedHeight = 0;
     currentLimit = geometry.usableHeightLaterPagePx;
     overflowsSinglePage = false;
@@ -303,12 +324,11 @@ export function paginateBlocks(params: {
     const neededGap = currentEntries.length > 0 ? blockGapPx : 0;
 
     // Start a fresh page if this block won't fit on the remaining space
-    // (unless this is the very first block on an empty non-first page, or page 1 with header where it still fits better on page 2)
     const canStartNewPage =
       currentEntries.length > 0 || (pages.length === 0 && headerHeightPx > 0);
 
     if (canStartNewPage && usedHeight + neededGap + blockHeight > currentLimit) {
-      pushCurrentPage();
+      pushCurrentPage(undefined, entry.originalIndex);
     }
 
     const gapOnActivePage = currentEntries.length > 0 ? blockGapPx : 0;
@@ -322,9 +342,17 @@ export function paginateBlocks(params: {
 
   // Always push the trailing page (even if empty right after a manual page break so user sees the new page)
   if (currentEntries.length > 0 || pages.length === 0 || pages[pages.length - 1].trailingBreak) {
+    const startIdx =
+      currentEntries.length > 0 ? currentEntries[0].originalIndex : pageStartIndex;
+    const endIdx =
+      currentEntries.length > 0
+        ? currentEntries[currentEntries.length - 1].originalIndex + 1
+        : pageStartIndex;
     pages.push({
       pageNumber: pages.length + 1,
       entries: currentEntries,
+      insertStartIndex: startIdx,
+      insertEndIndex: endIdx,
       overflowsSinglePage,
     });
   }

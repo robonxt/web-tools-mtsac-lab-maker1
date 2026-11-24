@@ -16,9 +16,19 @@ import {
   paginateBlocks,
   resolvePageSetup,
 } from '../lib/pageGeometry';
-import { hasLabPressDrag, readDragPayload } from '../lib/dnd';
+import {
+  clearActiveDrag,
+  hasLabPressDrag,
+  readDragPayload,
+  resolveDropEffect,
+} from '../lib/dnd';
 import { BlockView } from './BlockView';
 import { AddBlockMenu } from './AddBlockMenu';
+
+type DropIndicator =
+  | { kind: 'block'; blockId: string; edge: 'top' | 'bottom'; targetIndex: number }
+  | { kind: 'page-empty'; pageNumber: number; targetIndex: number }
+  | { kind: 'page-end'; pageNumber: number; targetIndex: number };
 
 interface PaperCanvasProps {
   lab: LabDocument;
@@ -106,94 +116,32 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
 
   const [headerHeightPx, setHeaderHeightPx] = useState<number>(138);
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
-  const [activeDropIndex, setActiveDropIndex] = useState<number | null>(null);
-  const [isDraggingOverCanvas, setIsDraggingOverCanvas] = useState(false);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
+  const isDraggingRef = useRef(false);
 
-  // Clear drag indicator whenever any drag ends anywhere in the window
-  useEffect(() => {
-    const clearDrag = () => {
-      setActiveDropIndex(null);
-      setIsDraggingOverCanvas(false);
-    };
-    window.addEventListener('dragend', clearDrag);
-    window.addEventListener('drop', clearDrag);
-    return () => {
-      window.removeEventListener('dragend', clearDrag);
-      window.removeEventListener('drop', clearDrag);
-    };
-  }, []);
-
-  const handleDropAtIndex = useCallback(
-    (e: React.DragEvent, targetIndex: number) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setActiveDropIndex(null);
-      setIsDraggingOverCanvas(false);
-      const payload = readDragPayload(e.dataTransfer);
-      if (!payload) return;
-      if (payload.kind === 'new-block') {
-        onInsertBlockAt?.(targetIndex, payload.blockType, payload.moduleId);
-      } else if (payload.kind === 'move-block') {
-        onReorderBlock?.(payload.blockId, targetIndex);
+  const setDropIndicatorSafe = useCallback((next: DropIndicator | null) => {
+    setDropIndicator((prev) => {
+      if (prev === next) return prev;
+      if (!prev || !next) return next;
+      if (prev.kind !== next.kind || prev.targetIndex !== next.targetIndex) return next;
+      if (
+        prev.kind === 'block' &&
+        next.kind === 'block' &&
+        prev.blockId === next.blockId &&
+        prev.edge === next.edge
+      ) {
+        return prev;
       }
-    },
-    [onInsertBlockAt, onReorderBlock]
-  );
-
-  const renderDropSlot = (targetIndex: number, showInlineAdd = true) => {
-    if (readOnly || printMode || !onInsertBlockAt) return null;
-    const isActive = activeDropIndex === targetIndex;
-
-    return (
-      <div
-        onDragOver={(e) => {
-          if (!hasLabPressDrag(e.dataTransfer)) return;
-          e.preventDefault();
-          e.stopPropagation();
-          e.dataTransfer.dropEffect = 'copy';
-          if (activeDropIndex !== targetIndex) setActiveDropIndex(targetIndex);
-          if (!isDraggingOverCanvas) setIsDraggingOverCanvas(true);
-        }}
-        onDragEnter={(e) => {
-          if (!hasLabPressDrag(e.dataTransfer)) return;
-          e.preventDefault();
-          setActiveDropIndex(targetIndex);
-          setIsDraggingOverCanvas(true);
-        }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            if (activeDropIndex === targetIndex) setActiveDropIndex(null);
-          }
-        }}
-        onDrop={(e) => handleDropAtIndex(e, targetIndex)}
-        className={`relative transition-all ${
-          isActive
-            ? 'py-2 my-1'
-            : isDraggingOverCanvas
-              ? 'py-1.5'
-              : ''
-        }`}
-      >
-        {isActive ? (
-          <div className="flex items-center gap-2 pointer-events-none">
-            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-            <span className="flex-1 h-[2px] bg-blue-600 rounded-full" />
-            <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 whitespace-nowrap">
-              Drop here
-            </span>
-            <span className="flex-1 h-[2px] bg-blue-600 rounded-full" />
-            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-          </div>
-        ) : showInlineAdd ? (
-          <AddBlockMenu
-            variant="divider"
-            modules={modules}
-            onInsert={(type, modId) => onInsertBlockAt(targetIndex, type, modId)}
-          />
-        ) : null}
-      </div>
-    );
-  };
+      if (
+        prev.kind !== 'block' &&
+        next.kind !== 'block' &&
+        prev.pageNumber === next.pageNumber
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, []);
 
   const isTypingInsideSelectedBlock = useCallback(() => {
     if (!selectedBlockId || readOnly) return false;
@@ -207,6 +155,11 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
 
   const measureAll = useCallback(
     (force = false) => {
+      // Freeze pagination measurements during active drag gestures to prevent ResizeObserver reflow loops
+      if (!force && isDraggingRef.current) {
+        return;
+      }
+
       const nextHeaderH = headerRef.current
         ? Math.ceil(headerRef.current.getBoundingClientRect().height)
         : headerHeightPx;
@@ -243,6 +196,56 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
       });
     },
     [headerHeightPx, isTypingInsideSelectedBlock, printMode, zoom]
+  );
+
+  // Clear drag indicator & unfreeze measurements whenever any drag ends anywhere in the window
+  useEffect(() => {
+    const clearDrag = () => {
+      const wasDragging = isDraggingRef.current;
+      isDraggingRef.current = false;
+      setDropIndicator(null);
+      clearActiveDrag();
+      if (wasDragging) {
+        window.requestAnimationFrame(() => measureAll(true));
+      }
+    };
+    window.addEventListener('dragend', clearDrag);
+    window.addEventListener('drop', clearDrag);
+    return () => {
+      window.removeEventListener('dragend', clearDrag);
+      window.removeEventListener('drop', clearDrag);
+    };
+  }, [measureAll]);
+
+  const handleDropAtIndex = useCallback(
+    (e: React.DragEvent, targetIndex: number) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isDraggingRef.current = false;
+      setDropIndicator(null);
+      const payload = readDragPayload(e.dataTransfer);
+      clearActiveDrag();
+      if (!payload) return;
+      if (payload.kind === 'new-block') {
+        onInsertBlockAt?.(targetIndex, payload.blockType, payload.moduleId);
+      } else if (payload.kind === 'move-block') {
+        onReorderBlock?.(payload.blockId, targetIndex);
+      }
+    },
+    [onInsertBlockAt, onReorderBlock]
+  );
+
+  const renderDropLineOverlay = (position: 'top' | 'bottom') => (
+    <div
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-x-0 z-30 flex items-center gap-1.5 ${
+        position === 'top' ? '-top-2.5' : '-bottom-2.5'
+      }`}
+    >
+      <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+      <span className="flex-1 h-[2px] bg-blue-600 rounded-full shadow-[0_0_6px_rgba(37,99,235,0.4)]" />
+      <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+    </div>
   );
 
   // Re-measure whenever geometry, layout, audience, blocks, or modules change
@@ -431,13 +434,13 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
       onDragOver={(e) => {
         if (!readOnly && !printMode && hasLabPressDrag(e.dataTransfer)) {
           e.preventDefault();
-          if (!isDraggingOverCanvas) setIsDraggingOverCanvas(true);
+          isDraggingRef.current = true;
+          e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
         }
       }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          setIsDraggingOverCanvas(false);
-          setActiveDropIndex(null);
+          setDropIndicator(null);
         }
       }}
       className={
@@ -583,25 +586,79 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
 
                   {/* Page Content Blocks */}
                   <div
-                    className="flex-1 flex flex-col"
+                    className="flex-1 flex flex-col relative"
                     style={{ gap: `${blockGapPx}px` }}
+                    onDragOver={(e) => {
+                      if (readOnly || printMode || !hasLabPressDrag(e.dataTransfer)) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      isDraggingRef.current = true;
+                      e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
+
+                      if (page.entries.length === 0) {
+                        setDropIndicatorSafe({
+                          kind: 'page-empty',
+                          pageNumber: page.pageNumber,
+                          targetIndex: page.insertStartIndex,
+                        });
+                        return;
+                      }
+
+                      // Cursor is in a gap between blocks or in the open area below the last block on this page
+                      const cursorY = e.clientY;
+                      for (let i = 0; i < page.entries.length; i++) {
+                        const entry = page.entries[i];
+                        const node = blockNodesRef.current.get(entry.block.id);
+                        if (!node) continue;
+                        const rect = node.getBoundingClientRect();
+                        if (cursorY < rect.top + rect.height / 2) {
+                          setDropIndicatorSafe({
+                            kind: 'block',
+                            blockId: entry.block.id,
+                            edge: 'top',
+                            targetIndex: entry.originalIndex,
+                          });
+                          return;
+                        }
+                      }
+
+                      setDropIndicatorSafe({
+                        kind: 'page-end',
+                        pageNumber: page.pageNumber,
+                        targetIndex: page.insertEndIndex,
+                      });
+                    }}
+                    onDrop={(e) => {
+                      if (readOnly || printMode || !hasLabPressDrag(e.dataTransfer)) return;
+                      if (page.entries.length === 0) {
+                        handleDropAtIndex(e, page.insertStartIndex);
+                        return;
+                      }
+                      const cursorY = e.clientY;
+                      for (let i = 0; i < page.entries.length; i++) {
+                        const entry = page.entries[i];
+                        const node = blockNodesRef.current.get(entry.block.id);
+                        if (!node) continue;
+                        const rect = node.getBoundingClientRect();
+                        if (cursorY < rect.top + rect.height / 2) {
+                          handleDropAtIndex(e, entry.originalIndex);
+                          return;
+                        }
+                      }
+                      handleDropAtIndex(e, page.insertEndIndex);
+                    }}
                   >
                     {page.entries.length === 0 ? (
                       <div
-                        onDragOver={(e) => {
-                          if (readOnly || printMode || !hasLabPressDrag(e.dataTransfer)) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setActiveDropIndex(lab.blocks.length);
-                        }}
-                        onDrop={(e) => handleDropAtIndex(e, lab.blocks.length)}
                         className={`py-12 text-center border border-dashed rounded-md text-xs transition-colors ${
-                          activeDropIndex === lab.blocks.length
+                          dropIndicator?.kind === 'page-empty' &&
+                          dropIndicator.pageNumber === page.pageNumber
                             ? 'border-blue-500 bg-blue-50/60 text-blue-700 font-medium'
                             : 'border-slate-200 text-slate-400'
                         }`}
                       >
-                        {activeDropIndex === lab.blocks.length
+                        {dropIndicator?.kind === 'page-empty' &&
+                        dropIndicator.pageNumber === page.pageNumber
                           ? 'Drop here to place on this page'
                           : isFirstPage
                             ? 'Drag a block here or click + Add in the toolbar to start writing.'
@@ -610,6 +667,19 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                     ) : (
                       page.entries.map((entry, idxInPage) => {
                         const { block, originalIndex } = entry;
+                        const showTopLine =
+                          dropIndicator?.kind === 'block' &&
+                          dropIndicator.blockId === block.id &&
+                          dropIndicator.edge === 'top';
+                        const isLastBlockOnPage = idxInPage === page.entries.length - 1;
+                        const showBottomLine =
+                          (dropIndicator?.kind === 'block' &&
+                            dropIndicator.blockId === block.id &&
+                            dropIndicator.edge === 'bottom') ||
+                          (isLastBlockOnPage &&
+                            dropIndicator?.kind === 'page-end' &&
+                            dropIndicator.pageNumber === page.pageNumber);
+
                         return (
                           <div
                             key={block.id}
@@ -620,10 +690,40 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                                 blockNodesRef.current.delete(block.id);
                               }
                             }}
+                            onDragOver={(e) => {
+                              if (readOnly || printMode || !hasLabPressDrag(e.dataTransfer)) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              isDraggingRef.current = true;
+                              e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const isTopHalf = e.clientY < rect.top + rect.height / 2;
+                              setDropIndicatorSafe({
+                                kind: 'block',
+                                blockId: block.id,
+                                edge: isTopHalf ? 'top' : 'bottom',
+                                targetIndex: isTopHalf ? originalIndex : originalIndex + 1,
+                              });
+                            }}
+                            onDrop={(e) => {
+                              if (readOnly || printMode || !hasLabPressDrag(e.dataTransfer)) return;
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const isTopHalf = e.clientY < rect.top + rect.height / 2;
+                              handleDropAtIndex(e, isTopHalf ? originalIndex : originalIndex + 1);
+                            }}
+                            className="relative"
                           >
-                            {!readOnly && onInsertBlockAt && idxInPage === 0 && (
+                            {showTopLine && renderDropLineOverlay('top')}
+
+                            {!readOnly && onInsertBlockAt && idxInPage === 0 && isFirstPage && (
                               <div className="mb-1.5">
-                                {renderDropSlot(originalIndex, isFirstPage)}
+                                <AddBlockMenu
+                                  variant="divider"
+                                  modules={modules}
+                                  onInsert={(type, modId) =>
+                                    onInsertBlockAt(page.insertStartIndex, type, modId)
+                                  }
+                                />
                               </div>
                             )}
                             <BlockView
@@ -647,30 +747,44 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                             />
                             {!readOnly && onInsertBlockAt && (
                               <div className="mt-1.5">
-                                {renderDropSlot(originalIndex + 1, true)}
+                                <AddBlockMenu
+                                  variant="divider"
+                                  modules={modules}
+                                  onInsert={(type, modId) =>
+                                    onInsertBlockAt(originalIndex + 1, type, modId)
+                                  }
+                                />
                               </div>
                             )}
+
+                            {showBottomLine && renderDropLineOverlay('bottom')}
                           </div>
                         );
                       })
                     )}
 
-                    {/* Bottom "+ Add" drop zone & button on the final page */}
+                    {/* Bottom "+ Add" button on the final page */}
                     {isLastPage && !readOnly && !printMode && onInsertBlockAt && (
                       <div
                         onDragOver={(e) => {
                           if (!hasLabPressDrag(e.dataTransfer)) return;
                           e.preventDefault();
                           e.stopPropagation();
-                          setActiveDropIndex(lab.blocks.length);
+                          isDraggingRef.current = true;
+                          e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
+                          setDropIndicatorSafe({
+                            kind: page.entries.length === 0 ? 'page-empty' : 'page-end',
+                            pageNumber: page.pageNumber,
+                            targetIndex: page.insertEndIndex,
+                          });
                         }}
-                        onDrop={(e) => handleDropAtIndex(e, lab.blocks.length)}
+                        onDrop={(e) => handleDropAtIndex(e, page.insertEndIndex)}
                       >
                         <AddBlockMenu
                           variant="footer"
                           modules={modules}
                           onInsert={(type, modId) =>
-                            onInsertBlockAt(lab.blocks.length, type, modId)
+                            onInsertBlockAt(page.insertEndIndex, type, modId)
                           }
                         />
                       </div>

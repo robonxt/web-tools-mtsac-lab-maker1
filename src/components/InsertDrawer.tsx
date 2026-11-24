@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { LabBlockType, ReusableModule } from '../types/lab';
-import { writeDragPayload } from '../lib/dnd';
+import { clearActiveDrag, writeDragPayload } from '../lib/dnd';
 
 interface InsertDrawerProps {
   modules: ReusableModule[];
@@ -86,6 +86,7 @@ export const InsertDrawer: React.FC<InsertDrawerProps> = ({
                     blockType: type,
                   });
                 }}
+                onDragEnd={clearActiveDrag}
                 onClick={() => onInsert(type)}
                 title={`Drag onto page or click to add ${label}`}
                 className="group relative flex flex-col items-start gap-1.5 p-2.5 rounded-lg border border-slate-200 bg-white hover:border-blue-400 hover:bg-blue-50/40 active:scale-[0.98] transition-all text-left cursor-grab active:cursor-grabbing"
@@ -150,6 +151,7 @@ export const InsertDrawer: React.FC<InsertDrawerProps> = ({
                       moduleId: mod.id,
                     });
                   }}
+                  onDragEnd={clearActiveDrag}
                   onClick={() => onInsert('moduleRef', mod.id)}
                   title={`Drag onto page or click to insert "${mod.title}"`}
                   className="group w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-white hover:border-teal-400 hover:bg-teal-50/40 active:scale-[0.99] transition-all text-left cursor-grab active:cursor-grabbing"
