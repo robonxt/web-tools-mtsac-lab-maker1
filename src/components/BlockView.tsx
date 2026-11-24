@@ -1069,13 +1069,16 @@ export const BlockView: React.FC<BlockViewProps> = ({
         </div>
       )}
 
-      {/* Floating Block Controls on Hover / Selection */}
+      {/* Floating Block Controls cleanly above top border (with hover bridge so mouse transition stays open) */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`absolute -top-3.5 right-1 z-20 flex items-center gap-0.5 bg-white border border-slate-200 rounded-md shadow-xs px-1 py-0.5 transition-opacity ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
+        className={`absolute bottom-full right-0 pb-2 z-20 transition-opacity ${
+          isSelected
+            ? 'opacity-100'
+            : 'opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto'
         }`}
       >
+        <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-md shadow-sm px-1 py-0.5">
         <span
           draggable
           onDragStart={(e) => {
@@ -1146,6 +1149,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
+        </div>
       </div>
 
       {renderInnerContent()}
