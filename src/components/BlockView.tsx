@@ -156,41 +156,23 @@ export const BlockView: React.FC<BlockViewProps> = ({
 
         if (editing && onChange) {
           return (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                {([1, 2, 3] as const).map((lvl) => (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => onChange({ ...block, level: lvl })}
-                    className={`px-2 py-0.5 text-[11px] font-mono rounded border transition-colors cursor-pointer ${
-                      block.level === lvl
-                        ? 'bg-blue-700 text-white border-blue-700'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    H{lvl}
-                  </button>
-                ))}
-              </div>
-              <AutoGrowTextarea
-                value={block.text}
-                onChange={(val) => onChange({ ...block, text: val })}
-                placeholder="Section heading..."
-                ariaLabel="Section heading"
-                singleLineWrap
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && onInsertParagraphBelow) {
-                    e.preventDefault();
-                    onInsertParagraphBelow();
-                  } else if (e.key === 'Backspace' && block.text === '' && onDelete) {
-                    e.preventDefault();
-                    onDelete();
-                  }
-                }}
-                className={`w-full bg-transparent focus:outline-none ${sizeClass}`}
-              />
-            </div>
+            <AutoGrowTextarea
+              value={block.text}
+              onChange={(val) => onChange({ ...block, text: val })}
+              placeholder="Section heading..."
+              ariaLabel="Section heading"
+              singleLineWrap
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && onInsertParagraphBelow) {
+                  e.preventDefault();
+                  onInsertParagraphBelow();
+                } else if (e.key === 'Backspace' && block.text === '' && onDelete) {
+                  e.preventDefault();
+                  onDelete();
+                }
+              }}
+              className={`w-full bg-transparent focus:outline-none ${sizeClass}`}
+            />
           );
         }
 
@@ -214,11 +196,12 @@ export const BlockView: React.FC<BlockViewProps> = ({
               variables={variables}
               rows={Math.max(2, Math.ceil((block.text.length || 1) / 82))}
               placeholder="Write instructions, or type / for blocks, {{ for variables, $x^2$ for math..."
+              borderless
               enableSlashCommands
               onSlashConvert={onConvertBlockType}
               onInsertBelow={onInsertParagraphBelow}
               onDeleteIfEmpty={onDelete}
-              className="text-[15px] leading-relaxed"
+              className={`${compact ? 'text-[14px]' : 'text-[15px]'} leading-relaxed`}
             />
           );
         }

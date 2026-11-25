@@ -738,6 +738,15 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
           e.preventDefault();
           isDraggingRef.current = true;
           e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
+
+          // Edge auto-scroll when dragging near top or bottom of canvas
+          const rect = e.currentTarget.getBoundingClientRect();
+          const edgeThreshold = 64;
+          if (e.clientY - rect.top < edgeThreshold) {
+            e.currentTarget.scrollTop -= 14;
+          } else if (rect.bottom - e.clientY < edgeThreshold) {
+            e.currentTarget.scrollTop += 14;
+          }
         }
       }}
       onDragLeave={(e) => {

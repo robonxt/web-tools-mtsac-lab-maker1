@@ -60,6 +60,17 @@ export const EditorStatusBar: React.FC<EditorStatusBarProps> = ({
       <div className="flex items-center gap-0.5" role="group" aria-label="Zoom">
         <button
           type="button"
+          onClick={() => {
+            const fit = Math.floor(((window.innerWidth - 72) / 816) * 100);
+            onChangeZoom(Math.max(55, Math.min(125, fit)));
+          }}
+          title="Fit page width to window"
+          className="px-1.5 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors cursor-pointer mr-1"
+        >
+          Fit
+        </button>
+        <button
+          type="button"
           onClick={() => stepZoom(-1)}
           disabled={zoom <= ZOOM_STEPS[0]}
           aria-label="Zoom out"

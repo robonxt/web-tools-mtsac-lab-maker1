@@ -506,11 +506,19 @@ export default function App() {
 
   const handleDeleteBlock = useCallback(
     (blockId: string) => {
-      updateActiveLab((lab) => ({
-        ...lab,
-        blocks: lab.blocks.filter((b) => b.id !== blockId),
-      }));
-      if (selectedBlockId === blockId) setSelectedBlockId(null);
+      let nextSelected: string | null = null;
+      updateActiveLab((lab) => {
+        const idx = lab.blocks.findIndex((b) => b.id === blockId);
+        const remaining = lab.blocks.filter((b) => b.id !== blockId);
+        if (selectedBlockId === blockId && remaining.length > 0) {
+          nextSelected = remaining[Math.max(0, idx - 1)]?.id || null;
+        }
+        return {
+          ...lab,
+          blocks: remaining,
+        };
+      });
+      if (selectedBlockId === blockId) setSelectedBlockId(nextSelected);
     },
     [updateActiveLab, selectedBlockId]
   );

@@ -36,6 +36,7 @@ import {
   LabBlockType,
   ReusableModule,
 } from '../types/lab';
+import { clearActiveDrag, writeDragPayload } from '../lib/dnd';
 
 interface EditorRibbonProps {
   canUndo: boolean;
@@ -190,7 +191,7 @@ export const EditorRibbon: React.FC<EditorRibbonProps> = ({
     <div
       role="toolbar"
       aria-label="Document formatting and block ribbon"
-      className="shrink-0 bg-[#F8FAFC] border-b border-slate-200 px-3 py-1.5 flex items-center gap-2 overflow-x-auto select-none"
+      className="shrink-0 bg-[#F8FAFC] border-b border-slate-200 px-3 py-1.5 flex flex-wrap items-center gap-2 select-none"
     >
       {/* Undo / Redo */}
       <div className="flex items-center gap-0.5 shrink-0">
@@ -227,9 +228,17 @@ export const EditorRibbon: React.FC<EditorRibbonProps> = ({
           <button
             key={type}
             type="button"
+            draggable
+            onDragStart={(e) => {
+              writeDragPayload(e.dataTransfer, {
+                kind: 'new-block',
+                blockType: type,
+              });
+            }}
+            onDragEnd={() => clearActiveDrag()}
             onClick={() => onInsertBlock(type)}
-            title={`Insert ${label}`}
-            className={ribbonBtn}
+            title={`Click or drag onto page to insert ${label}`}
+            className={`${ribbonBtn} cursor-grab active:cursor-grabbing`}
           >
             <Icon className="w-4 h-4 text-blue-600 shrink-0" />
             <span>{label}</span>
@@ -263,11 +272,22 @@ export const EditorRibbon: React.FC<EditorRibbonProps> = ({
                   key={type}
                   type="button"
                   role="menuitem"
+                  draggable
+                  onDragStart={(e) => {
+                    writeDragPayload(e.dataTransfer, {
+                      kind: 'new-block',
+                      blockType: type,
+                    });
+                  }}
+                  onDragEnd={() => {
+                    clearActiveDrag();
+                    setShowMoreMenu(false);
+                  }}
                   onClick={() => {
                     onInsertBlock(type);
                     setShowMoreMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-grab active:cursor-grabbing"
                 >
                   <Icon className="w-4 h-4 text-blue-600 shrink-0" />
                   <div className="min-w-0">
@@ -288,11 +308,23 @@ export const EditorRibbon: React.FC<EditorRibbonProps> = ({
                       key={mod.id}
                       type="button"
                       role="menuitem"
+                      draggable
+                      onDragStart={(e) => {
+                        writeDragPayload(e.dataTransfer, {
+                          kind: 'new-block',
+                          blockType: 'moduleRef',
+                          moduleId: mod.id,
+                        });
+                      }}
+                      onDragEnd={() => {
+                        clearActiveDrag();
+                        setShowMoreMenu(false);
+                      }}
                       onClick={() => {
                         onInsertBlock('moduleRef', mod.id);
                         setShowMoreMenu(false);
                       }}
-                      className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+                      className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2.5 cursor-grab active:cursor-grabbing"
                     >
                       <Layers className="w-4 h-4 text-teal-600 shrink-0" />
                       <span className="text-xs font-medium text-slate-800 truncate">{mod.title}</span>

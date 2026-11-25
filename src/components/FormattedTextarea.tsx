@@ -48,6 +48,7 @@ interface FormattedTextareaProps {
   rows?: number;
   className?: string;
   compactToolbar?: boolean;
+  borderless?: boolean;
   enableSlashCommands?: boolean;
   onSlashConvert?: (type: LabBlockType) => void;
   onInsertBelow?: () => void;
@@ -62,6 +63,7 @@ export const FormattedTextarea: React.FC<FormattedTextareaProps> = ({
   rows = 3,
   className = '',
   compactToolbar = false,
+  borderless = false,
   enableSlashCommands = false,
   onSlashConvert,
   onInsertBelow,
@@ -407,7 +409,11 @@ export const FormattedTextarea: React.FC<FormattedTextareaProps> = ({
         onKeyDown={handleKeyDown}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full text-slate-800 bg-slate-50/70 border border-slate-200 rounded-md p-2.5 focus:outline-none focus:bg-white focus:border-blue-600 resize-none overflow-hidden break-words ${className}`}
+        className={`w-full text-slate-800 focus:outline-none resize-none overflow-hidden break-words ${
+          borderless
+            ? 'bg-transparent border-0 p-0'
+            : 'bg-slate-50/70 border border-slate-200 rounded-md p-2.5 focus:bg-white focus:border-blue-600'
+        } ${className}`}
       />
 
       {/* Live {{ Variable Autocomplete Popover */}
