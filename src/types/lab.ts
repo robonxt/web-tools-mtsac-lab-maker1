@@ -16,6 +16,8 @@ export type StepStyle = 'numbered' | 'stepped' | 'minimal';
 
 export type DensityChoice = 'comfortable' | 'compact';
 
+export type SpacingScale = 'tight' | 'normal' | 'relaxed';
+
 export type CodePrintTheme = 'light' | 'dark';
 
 export type ImageWidthPreset = 40 | 65 | 85 | 100;
@@ -53,6 +55,8 @@ export interface LayoutProfile {
   accentColor: string;
   stepStyle: StepStyle;
   density: DensityChoice;
+  headerSpacing?: SpacingScale;
+  blockSpacing?: SpacingScale;
   showPageNumbers: boolean;
   footerTemplate: string;
   codePrintTheme?: CodePrintTheme;

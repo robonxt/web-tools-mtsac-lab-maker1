@@ -9,6 +9,7 @@ import {
   LabDocument,
   LayoutProfile,
   ReusableModule,
+  SpacingScale,
   StepStyle,
 } from '../types/lab';
 import { createId } from '../lib/blockFactory';
@@ -70,6 +71,8 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
       accentColor: '#1D4ED8',
       stepStyle: 'stepped',
       density: 'comfortable',
+      headerSpacing: 'normal',
+      blockSpacing: 'normal',
       showPageNumbers: true,
       footerTemplate: '{{course_code}} · {{lab_number}} · {{semester}}',
       codePrintTheme: 'light',
@@ -329,6 +332,69 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
                 <option value="compact">Compact Worksheet</option>
               </select>
             </label>
+          </div>
+
+          {/* Header & Section Spacing */}
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-slate-500">Header Spacing</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    { id: 'tight', label: 'Compact' },
+                    { id: 'normal', label: 'Balanced' },
+                    { id: 'relaxed', label: 'Airy' },
+                  ] as Array<{ id: SpacingScale; label: string }>
+                ).map((opt) => {
+                  const activeHeaderSp = selected.headerSpacing || 'normal';
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onUpdateLayout({ ...selected, headerSpacing: opt.id })}
+                      className={`py-1.5 px-2 text-xs font-medium rounded border transition-colors cursor-pointer ${
+                        activeHeaderSp === opt.id
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-slate-500">Section Spacing</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    { id: 'tight', label: 'Tight' },
+                    { id: 'normal', label: 'Normal' },
+                    { id: 'relaxed', label: 'Relaxed' },
+                  ] as Array<{ id: SpacingScale; label: string }>
+                ).map((opt) => {
+                  const activeBlockSp =
+                    selected.blockSpacing ||
+                    (selected.density === 'compact' ? 'tight' : 'normal');
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onUpdateLayout({ ...selected, blockSpacing: opt.id })}
+                      className={`py-1.5 px-2 text-xs font-medium rounded border transition-colors cursor-pointer ${
+                        activeBlockSp === opt.id
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Code Block Print Style */}

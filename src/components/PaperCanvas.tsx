@@ -109,7 +109,15 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
   );
 
   const fontClass = layout.fontFamily === 'serif' ? 'font-serif' : 'font-sans';
-  const blockGapPx = layout.density === 'compact' ? 14 : 22;
+  const effectiveBlockSpacing =
+    layout.blockSpacing || (layout.density === 'compact' ? 'tight' : 'normal');
+  const blockGapPx =
+    effectiveBlockSpacing === 'tight'
+      ? 12
+      : effectiveBlockSpacing === 'relaxed'
+        ? 32
+        : 22;
+  const effectiveHeaderSpacing = layout.headerSpacing || 'normal';
   const editionLabel = audienceMode === 'instructor' ? 'Instructor Key' : 'Student Handout';
   const resolvedFooter = resolveVariables(layout.footerTemplate, variables, showRawTokens);
 
@@ -345,6 +353,8 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     layout.fontFamily,
     layout.density,
     layout.headerVariant,
+    layout.headerSpacing,
+    layout.blockSpacing,
     geometry.contentWidthPx,
     audienceMode,
     showRawTokens,
@@ -414,23 +424,55 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     ].filter(Boolean);
     const metaLine = metaParts.join(' · ');
 
-    const headerRecalcKey = `${lab.id}-${geometry.contentWidthPx}-${layout.headerVariant}-${layout.fontFamily}-${layout.density}`;
+    const headerRecalcKey = `${lab.id}-${geometry.contentWidthPx}-${layout.headerVariant}-${effectiveHeaderSpacing}-${layout.fontFamily}-${layout.density}`;
+
+    const titleRowGapClass =
+      effectiveHeaderSpacing === 'tight'
+        ? 'gap-1.5'
+        : effectiveHeaderSpacing === 'relaxed'
+          ? 'gap-4'
+          : 'gap-2.5';
+    const subtitleMarginClass =
+      effectiveHeaderSpacing === 'tight'
+        ? 'mt-1'
+        : effectiveHeaderSpacing === 'relaxed'
+          ? 'mt-3'
+          : 'mt-2';
+    const bannerPaddingClass =
+      effectiveHeaderSpacing === 'tight'
+        ? 'px-4 py-3 mb-4'
+        : effectiveHeaderSpacing === 'relaxed'
+          ? 'px-6 py-5 mb-9'
+          : 'px-5 py-4 mb-6';
+    const rulePaddingClass =
+      effectiveHeaderSpacing === 'tight'
+        ? 'pb-3 mb-4'
+        : effectiveHeaderSpacing === 'relaxed'
+          ? 'pb-6 mb-9'
+          : 'pb-4 mb-6';
+    const gridGapClass =
+      effectiveHeaderSpacing === 'tight'
+        ? 'gap-3'
+        : effectiveHeaderSpacing === 'relaxed'
+          ? 'gap-8'
+          : 'gap-5';
 
     const editableTitle = !readOnly && onUpdateLabMeta ? (
-      <div className="flex items-start gap-2.5">
+      <div className={`flex items-start ${titleRowGapClass}`}>
         <div className="inline-grid items-center shrink-0 max-w-[40%]">
           <span
             aria-hidden="true"
-            className="col-start-1 row-start-1 invisible whitespace-pre font-bold text-[23px] leading-tight tracking-tight pr-0.5"
+            className="col-start-1 row-start-1 invisible whitespace-pre min-w-[2ch] font-bold text-[23px] leading-tight tracking-tight pr-0.5"
           >
             {lab.labNumber || 'Lab'}
           </span>
           <input
             type="text"
+            size={1}
             value={lab.labNumber}
             onChange={(e) => onUpdateLabMeta({ labNumber: e.target.value })}
             aria-label="Document number"
-            className="col-start-1 row-start-1 w-full min-w-[2.5ch] font-bold text-[23px] leading-tight tracking-tight bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
+            className="col-start-1 row-start-1 w-full min-w-0 font-bold text-[23px] leading-tight tracking-tight bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
             style={{ color: layout.accentColor }}
           />
         </div>
@@ -446,7 +488,18 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
       </div>
     ) : (
       <h1 className="text-[23px] font-bold tracking-tight text-slate-900 leading-tight break-words">
-        <span style={{ color: layout.accentColor }}>{lab.labNumber}: </span>
+        <span
+          className={
+            effectiveHeaderSpacing === 'tight'
+              ? 'mr-1'
+              : effectiveHeaderSpacing === 'relaxed'
+                ? 'mr-2.5'
+                : 'mr-1.5'
+          }
+          style={{ color: layout.accentColor }}
+        >
+          {lab.labNumber}:
+        </span>
         {resolveVariables(lab.title, variables, showRawTokens)}
       </h1>
     );
@@ -458,10 +511,10 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         placeholder="Add a brief subtitle or learning focus..."
         ariaLabel="Document subtitle"
         recalcKey={headerRecalcKey}
-        className="w-full mt-2 text-sm leading-relaxed text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
+        className={`w-full ${subtitleMarginClass} text-sm leading-relaxed text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none`}
       />
     ) : lab.subtitle ? (
-      <p className="mt-2 text-sm text-slate-600 leading-relaxed break-words">
+      <p className={`${subtitleMarginClass} text-sm text-slate-600 leading-relaxed break-words`}>
         {resolveVariables(lab.subtitle, variables, showRawTokens)}
       </p>
     ) : null;
@@ -469,7 +522,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     if (layout.headerVariant === 'banner') {
       return (
         <header
-          className="bg-slate-50 border border-slate-200 px-5 py-4 mb-6"
+          className={`bg-slate-50 border border-slate-200 ${bannerPaddingClass}`}
           style={{ borderTopWidth: '3px', borderTopColor: layout.accentColor }}
         >
           <div className="text-xs text-slate-500 mb-1.5 tabular-nums break-words">{metaLine}</div>
@@ -481,8 +534,8 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
 
     if (layout.headerVariant === 'grid') {
       return (
-        <header className="pb-4 mb-6 border-b border-slate-300">
-          <div className="flex items-start justify-between gap-5">
+        <header className={`${rulePaddingClass} border-b border-slate-300`}>
+          <div className={`flex items-start justify-between ${gridGapClass}`}>
             <div className="flex-1 min-w-0">
               <div className="text-xs font-medium text-slate-500 mb-1 break-words">
                 {course?.code} — {course?.title} · {kindLabel}
@@ -527,7 +580,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
 
     return (
       <header
-        className="pb-4 mb-6"
+        className={rulePaddingClass}
         style={{ borderBottomWidth: '2px', borderBottomColor: layout.accentColor }}
       >
         <div className="text-xs text-slate-500 mb-1.5 tabular-nums break-words">{metaLine}</div>

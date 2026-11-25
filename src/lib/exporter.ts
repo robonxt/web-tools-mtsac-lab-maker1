@@ -353,7 +353,46 @@ export function generateStandaloneHtml(params: {
     .map((b) => renderBlockHtml(b, audience, vars, layout, modules))
     .join('\n');
 
-  const spacing = layout.density === 'compact' ? '14px' : '20px';
+  const effectiveBlockSpacing =
+    layout.blockSpacing || (layout.density === 'compact' ? 'tight' : 'normal');
+  const spacing =
+    effectiveBlockSpacing === 'tight'
+      ? '12px'
+      : effectiveBlockSpacing === 'relaxed'
+        ? '30px'
+        : '20px';
+  const effectiveHeaderSpacing = layout.headerSpacing || 'normal';
+  const hdrBottomMargin =
+    effectiveHeaderSpacing === 'tight'
+      ? '18px'
+      : effectiveHeaderSpacing === 'relaxed'
+        ? '36px'
+        : '26px';
+  const hdrBannerPad =
+    effectiveHeaderSpacing === 'tight'
+      ? '14px 18px'
+      : effectiveHeaderSpacing === 'relaxed'
+        ? '24px 28px'
+        : '18px 22px';
+  const hdrRulePadBottom =
+    effectiveHeaderSpacing === 'tight'
+      ? '12px'
+      : effectiveHeaderSpacing === 'relaxed'
+        ? '24px'
+        : '18px';
+  const hdrGridGap =
+    effectiveHeaderSpacing === 'tight'
+      ? '14px'
+      : effectiveHeaderSpacing === 'relaxed'
+        ? '32px'
+        : '22px';
+  const hdrSubTop =
+    effectiveHeaderSpacing === 'tight'
+      ? '4px'
+      : effectiveHeaderSpacing === 'relaxed'
+        ? '12px'
+        : '8px';
+
   const printCodeCss =
     effectiveCodePrint === 'light'
       ? `
@@ -401,25 +440,25 @@ export function generateStandaloneHtml(params: {
     }
     .hdr-meta { font-size: 12px; color: #475569; margin-bottom: 8px; }
     h1 { margin: 0; font-size: 26px; line-height: 1.25; color: #0f172a; overflow-wrap: break-word; }
-    .hdr-sub { margin: 8px 0 0; color: #475569; font-size: 14px; overflow-wrap: break-word; }
+    .hdr-sub { margin: ${hdrSubTop} 0 0; color: #475569; font-size: 14px; overflow-wrap: break-word; }
     .hdr-banner {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       border-top: 3px solid var(--accent);
-      padding: 20px 24px;
-      margin-bottom: 28px;
+      padding: ${hdrBannerPad};
+      margin-bottom: ${hdrBottomMargin};
     }
     .hdr-editorial {
-      padding-bottom: 18px;
+      padding-bottom: ${hdrRulePadBottom};
       border-bottom: 2px solid var(--accent);
-      margin-bottom: 28px;
+      margin-bottom: ${hdrBottomMargin};
     }
     .hdr-grid {
-      padding-bottom: 18px;
+      padding-bottom: ${hdrRulePadBottom};
       border-bottom: 1px solid #cbd5e1;
-      margin-bottom: 28px;
+      margin-bottom: ${hdrBottomMargin};
     }
-    .hdr-grid-top { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+    .hdr-grid-top { display: flex; justify-content: space-between; gap: ${hdrGridGap}; align-items: flex-start; }
     .hdr-grid-main { flex: 1; min-width: 0; }
     .hdr-grid-box {
       font-size: 12px;
