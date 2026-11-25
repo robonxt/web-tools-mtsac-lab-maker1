@@ -136,6 +136,42 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
   const [subItemHeights, setSubItemHeights] = useState<Record<string, SubItemHeights>>({});
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const isDraggingRef = useRef(false);
+  const pendingFocusRef = useRef<{ blockId: string; edge: 'start' | 'end' } | null>(null);
+
+  useEffect(() => {
+    const pending = pendingFocusRef.current;
+    if (!pending || pending.blockId !== selectedBlockId || readOnly || printMode) return;
+    pendingFocusRef.current = null;
+
+    const rafId = window.requestAnimationFrame(() => {
+      let targetContainer: HTMLDivElement | null = null;
+      for (const entry of entryNodesRef.current.values()) {
+        if (entry.blockId === pending.blockId) {
+          targetContainer = entry.el;
+          break;
+        }
+      }
+      if (!targetContainer) return;
+
+      const fields = Array.from(
+        targetContainer.querySelectorAll<HTMLTextAreaElement | HTMLInputElement>(
+          'textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'
+        )
+      ).filter((el) => !el.disabled && el.offsetParent !== null);
+
+      if (fields.length === 0) return;
+      const field = pending.edge === 'start' ? fields[0] : fields[fields.length - 1];
+      field.focus();
+      const pos = pending.edge === 'start' ? 0 : field.value.length;
+      try {
+        field.setSelectionRange(pos, pos);
+      } catch {
+        // Some input types do not support setSelectionRange
+      }
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [selectedBlockId, readOnly, printMode]);
 
   const setDropIndicatorSafe = useCallback((next: DropIndicator | null) => {
     setDropIndicator((prev) => {
@@ -593,9 +629,110 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
   const scaleFactor = printMode ? 1 : zoom / 100;
   const totalPages = pages.length;
 
+  const handleCanvasKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (readOnly || printMode || !selectedBlockId || !onSelectBlock) return;
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+
+      // Do not hijack arrow keys when slash/variable autocomplete popover is open
+      if (document.querySelector('[role="listbox"]')) return;
+
+      const target = e.target;
+      if (
+        !(target instanceof HTMLTextAreaElement) &&
+        !(target instanceof HTMLInputElement && target.type === 'text')
+      ) {
+        return;
+      }
+
+      const selStart = target.selectionStart ?? 0;
+      const selEnd = target.selectionEnd ?? 0;
+      if (selStart !== selEnd) return;
+
+      const isInput = target instanceof HTMLInputElement;
+      const atStart = isInput || selStart === 0;
+      const atEnd = isInput || selStart === target.value.length;
+
+      if (e.key === 'ArrowUp' && !atStart) return;
+      if (e.key === 'ArrowDown' && !atEnd) return;
+
+      let activeContainer: HTMLDivElement | null = null;
+      for (const entry of entryNodesRef.current.values()) {
+        if (entry.blockId === selectedBlockId && entry.el.contains(target)) {
+          activeContainer = entry.el;
+          break;
+        }
+      }
+      if (!activeContainer) return;
+
+      const fields = Array.from(
+        activeContainer.querySelectorAll<HTMLTextAreaElement | HTMLInputElement>(
+          'textarea, input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'
+        )
+      ).filter((el) => !el.disabled && el.offsetParent !== null);
+
+      const fieldIdx = fields.indexOf(target);
+      if (fieldIdx === -1) return;
+
+      // Move between fields inside the same block first (e.g. Steps or Question + Key)
+      if (e.key === 'ArrowUp' && fieldIdx > 0) {
+        e.preventDefault();
+        const prevField = fields[fieldIdx - 1];
+        prevField.focus();
+        try {
+          prevField.setSelectionRange(prevField.value.length, prevField.value.length);
+        } catch {
+          // Ignore unsupported input types
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowDown' && fieldIdx < fields.length - 1) {
+        e.preventDefault();
+        const nextField = fields[fieldIdx + 1];
+        nextField.focus();
+        try {
+          nextField.setSelectionRange(0, 0);
+        } catch {
+          // Ignore unsupported input types
+        }
+        return;
+      }
+
+      // Jump to adjacent visible block in document order
+      const visibleBlockIds = lab.blocks
+        .filter(
+          (b) =>
+            b.type !== 'pageBreak' &&
+            !(audienceMode === 'student' && b.audience === 'instructor')
+        )
+        .map((b) => b.id);
+
+      const curBlockIdx = visibleBlockIds.indexOf(selectedBlockId);
+      if (curBlockIdx === -1) return;
+
+      const nextBlockId =
+        e.key === 'ArrowUp'
+          ? visibleBlockIds[curBlockIdx - 1]
+          : visibleBlockIds[curBlockIdx + 1];
+
+      if (!nextBlockId) return;
+
+      e.preventDefault();
+      pendingFocusRef.current = {
+        blockId: nextBlockId,
+        edge: e.key === 'ArrowUp' ? 'end' : 'start',
+      };
+      onSelectBlock(nextBlockId);
+    },
+    [readOnly, printMode, selectedBlockId, onSelectBlock, lab.blocks, audienceMode]
+  );
+
   return (
     <div
       onClick={() => onSelectBlock?.(null)}
+      onKeyDown={handleCanvasKeyDown}
       onBlurCapture={handleBlurCapture}
       onDragOver={(e) => {
         if (!readOnly && !printMode && hasLabPressDrag(e.dataTransfer)) {

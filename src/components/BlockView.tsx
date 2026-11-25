@@ -1,11 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
-  Copy,
   ExternalLink,
-  Eye,
-  EyeOff,
   GripVertical,
   Layers,
   Plus,
@@ -730,7 +725,7 @@ export const BlockView: React.FC<BlockViewProps> = ({
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg shadow-sm px-1.5 py-1">
+        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg shadow-sm px-1 py-1">
           <div
             draggable
             onMouseDown={() => setIsGripActive(true)}
@@ -754,75 +749,19 @@ export const BlockView: React.FC<BlockViewProps> = ({
           >
             <GripVertical className="w-4 h-4" />
           </div>
-          <span className="h-4 w-px bg-slate-200 mx-0.5" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => onMove?.(-1)}
-            disabled={index === 0}
-            title="Move section up"
-            className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 active:scale-95 disabled:opacity-30 rounded-md cursor-pointer"
-          >
-            <ArrowUp className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onMove?.(1)}
-            disabled={index === totalBlocks - 1}
-            title="Move section down"
-            className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 active:scale-95 disabled:opacity-30 rounded-md cursor-pointer"
-          >
-            <ArrowDown className="w-4 h-4" />
-          </button>
-          {onChange && (
-            <button
-              type="button"
-              onClick={() =>
-                onChange({
-                  ...block,
-                  audience: block.audience === 'instructor' ? 'all' : 'instructor',
-                })
-              }
-              title={
-                isInstructorOnly
-                  ? 'Currently Instructor-only — click to show to students'
-                  : 'Currently visible to all — click to make Instructor-only'
-              }
-              className={`min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center active:scale-95 rounded-md cursor-pointer ${
-                isInstructorOnly
-                  ? 'text-amber-700 bg-amber-50 hover:text-amber-900'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-            >
-              {isInstructorOnly ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          )}
           {canSaveAsModule && (
-            <button
-              type="button"
-              onClick={() => onSaveAsModule?.()}
-              title="Save as reusable Shared Module"
-              className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-teal-700 hover:bg-teal-50 active:scale-95 rounded-md cursor-pointer"
-            >
-              <Layers className="w-4 h-4" />
-            </button>
+            <>
+              <span className="h-4 w-px bg-slate-200 mx-0.5" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => onSaveAsModule?.()}
+                title="Save as reusable Shared Module"
+                className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-teal-700 hover:bg-teal-50 active:scale-95 rounded-md cursor-pointer"
+              >
+                <Layers className="w-4 h-4" />
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={() => onDuplicate?.()}
-            title="Duplicate section"
-            className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 active:scale-95 rounded-md cursor-pointer"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-          <span className="h-4 w-px bg-slate-200 mx-0.5" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => onDelete?.()}
-            title="Delete section"
-            className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-500 hover:text-red-600 hover:bg-red-50 active:scale-95 rounded-md cursor-pointer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
