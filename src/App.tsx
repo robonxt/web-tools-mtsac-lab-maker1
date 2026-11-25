@@ -645,9 +645,7 @@ export default function App() {
       professor: params.professor,
       semester: params.semester,
       defaultLayoutId: params.defaultLayoutId,
-      variables: {
-        runtime_version: 'Standard Lab Environment',
-      },
+      variables: {},
     };
     commitWorkspace((prev) => ({
       ...prev,

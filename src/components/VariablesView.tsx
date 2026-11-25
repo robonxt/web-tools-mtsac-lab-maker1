@@ -219,14 +219,14 @@ export const VariablesView: React.FC<VariablesViewProps> = ({
               type="text"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
-              placeholder="variable_name (e.g. docker_image)"
+              placeholder="variable_name"
               className="w-60 font-mono text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-blue-600"
             />
             <input
               type="text"
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
-              placeholder="Value (e.g. python:3.13-slim)"
+              placeholder="Value"
               className="flex-1 min-w-[200px] text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-3 py-1.5 focus:outline-none focus:border-blue-600"
             />
             <button

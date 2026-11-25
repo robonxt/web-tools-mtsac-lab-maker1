@@ -59,7 +59,7 @@ export const DocumentSettingsModal: React.FC<DocumentSettingsModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('basics');
   const [showSnapForm, setShowSnapForm] = useState(false);
-  const [snapSemester, setSnapSemester] = useState(course?.semester || 'Fall 2026');
+  const [snapSemester, setSnapSemester] = useState(course?.semester || '');
   const [snapLabel, setSnapLabel] = useState('');
   const [snapNote, setSnapNote] = useState('');
 
@@ -348,7 +348,7 @@ export const DocumentSettingsModal: React.FC<DocumentSettingsModalProps> = ({
                     type="text"
                     value={snapSemester}
                     onChange={(e) => setSnapSemester(e.target.value)}
-                    placeholder="Semester (e.g. Fall 2026)"
+                    placeholder="Semester / Term"
                     className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-600"
                   />
                   <input

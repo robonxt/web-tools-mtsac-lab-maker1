@@ -572,7 +572,7 @@ export const SaveAsModuleModal: React.FC<SaveAsModuleModalProps> = ({
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Git Submission Rules"
+              placeholder="Module title"
               className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
@@ -731,7 +731,7 @@ export const SemesterRolloverModal: React.FC<SemesterRolloverModalProps> = ({
                 autoFocus
                 value={nextSemester}
                 onChange={(e) => setNextSemester(e.target.value)}
-                placeholder="e.g. Spring 2027"
+                placeholder="Next semester"
                 className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
               />
             </label>
@@ -997,23 +997,18 @@ export const NewLabModal: React.FC<NewLabModalProps> = ({
 }) => {
   const [courseId, setCourseId] = useState(defaultCourseId || courses[0]?.id || '');
   const [docKind, setDocKind] = useState<DocKind>('lab');
-  const [labNumber, setLabNumber] = useState('Lab 06');
+  const [labNumber, setLabNumber] = useState('');
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
-  const [estimatedTime, setEstimatedTime] = useState('60 min');
-  const [template, setTemplate] = useState<LabTemplateKind>('programming');
+  const [estimatedTime, setEstimatedTime] = useState('');
+  const [template, setTemplate] = useState<LabTemplateKind>('blank');
 
   const handleKindChange = (nextKind: DocKind) => {
     setDocKind(nextKind);
     if (nextKind === 'homework') {
-      setLabNumber('HW 03');
       setTemplate('worksheet');
-    } else if (nextKind === 'guide') {
-      setLabNumber('Guide 01');
-      setTemplate('programming');
     } else {
-      setLabNumber('Lab 06');
-      setTemplate('programming');
+      setTemplate('blank');
     }
   };
 
@@ -1122,7 +1117,7 @@ export const NewLabModal: React.FC<NewLabModalProps> = ({
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Docker Containers & Port Mapping"
+              placeholder="Document title"
               className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
@@ -1210,7 +1205,7 @@ export const NewCourseModal: React.FC<NewCourseModalProps> = ({
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [professor, setProfessor] = useState('');
-  const [semester, setSemester] = useState('Fall 2026');
+  const [semester, setSemester] = useState('');
   const [defaultLayoutId, setDefaultLayoutId] = useState(layoutProfiles[0]?.id || '');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1255,7 +1250,7 @@ export const NewCourseModal: React.FC<NewCourseModalProps> = ({
                 autoFocus
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="IT 410"
+                placeholder="Course code"
                 className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
               />
             </label>
@@ -1277,7 +1272,7 @@ export const NewCourseModal: React.FC<NewCourseModalProps> = ({
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Cloud Infrastructure & DevOps"
+              placeholder="Course title"
               className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
@@ -1289,7 +1284,7 @@ export const NewCourseModal: React.FC<NewCourseModalProps> = ({
               required
               value={professor}
               onChange={(e) => setProfessor(e.target.value)}
-              placeholder="Prof. Jordan Patel"
+              placeholder="Instructor name"
               className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
