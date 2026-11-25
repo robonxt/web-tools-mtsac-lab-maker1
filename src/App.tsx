@@ -15,7 +15,7 @@ import {
   WorkspaceState,
   WorkspaceView,
 } from './types/lab';
-import { createSeedWorkspace } from './data/seedWorkspace';
+import { createEmptyWorkspace, createSeedWorkspace } from './data/seedWorkspace';
 import { parseImportedWorkspaceJson, workspaceRepository } from './lib/storage';
 import {
   buildTemplateBlocks,
@@ -36,6 +36,7 @@ import {
 } from './lib/exporter';
 import { WorkspaceBar } from './components/WorkspaceBar';
 import { EditorRibbon } from './components/EditorRibbon';
+import { EditorStatusBar } from './components/EditorStatusBar';
 import { LibraryView } from './components/LibraryView';
 import { OutlineRail } from './components/OutlineRail';
 import { PaperCanvas } from './components/PaperCanvas';
@@ -55,12 +56,12 @@ const HISTORY_COALESCE_MS = 650;
 
 export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() =>
-    workspaceRepository.load(createSeedWorkspace)
+    workspaceRepository.load(createEmptyWorkspace)
   );
   const [history, setHistory] = useState<WorkspaceState[]>([]);
   const [future, setFuture] = useState<WorkspaceState[]>([]);
 
-  const [activeView, setActiveView] = useState<WorkspaceView>('editor');
+  const [activeView, setActiveView] = useState<WorkspaceView>('library');
   const [setupSection, setSetupSection] = useState<SetupSection>('layouts');
   const [audienceMode, setAudienceMode] = useState<AudienceMode>('student');
   const [printEdition, setPrintEdition] = useState<AudienceMode>('student');
@@ -950,6 +951,12 @@ export default function App() {
     showToast('Imported workspace backup');
   };
 
+  const handleLoadSampleWorkspace = () => {
+    commitWorkspace(() => createSeedWorkspace());
+    setSelectedBlockId(null);
+    showToast('Loaded sample course workspace');
+  };
+
   const diffLab = activeDiff
     ? workspace.labs.find((l) => l.id === activeDiff.labId) || null
     : null;
@@ -961,15 +968,15 @@ export default function App() {
   return (
     <>
       <div className="screen-only-app h-screen w-screen overflow-hidden flex flex-col bg-[#F1F5F9]">
-        {activeLab && activeLayout && (
+        {activeLayout && (
           <WorkspaceBar
             activeView={activeView}
             onChangeView={setActiveView}
             setupSection={setupSection}
             onChangeSetupSection={setSetupSection}
             courseCode={activeCourse?.code}
-            labNumber={activeLab.labNumber}
-            labTitle={activeLab.title}
+            labNumber={activeLab?.labNumber || ''}
+            labTitle={activeLab?.title || ''}
             savedLabel={savedLabel}
             missingVariables={missingVariables}
             onOpenVariables={() => openSetupSection('variables')}
@@ -977,23 +984,9 @@ export default function App() {
             onToggleOutline={toggleOutline}
             showDocumentSettings={showDocumentSettings}
             onOpenDocumentSettings={() => setShowDocumentSettings(true)}
-            canUndo={history.length > 0}
-            onUndo={handleUndo}
-            canRedo={future.length > 0}
-            onRedo={handleRedo}
-            pageSetup={activePageSetup}
-            pageCount={pageCount}
-            hasPageSetupOverride={Boolean(activeLab.pageSetupOverride)}
-            onChangePageSetupForDoc={handleChangePageSetupForDoc}
-            onSavePageSetupToLayout={handleSavePageSetupToLayout}
-            onResetPageSetupOverride={handleResetPageSetupOverride}
-            zoom={zoom}
-            onChangeZoom={setZoom}
+            hasActiveLab={Boolean(activeLab)}
             audienceMode={audienceMode}
             onChangeAudience={setAudienceMode}
-            onQuickPrint={() =>
-              handlePrintPdf(audienceMode, activeLayout.codePrintTheme || 'light')
-            }
             onOpenExport={() => setShowExportModal(true)}
           />
         )}
@@ -1002,6 +995,10 @@ export default function App() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {activeView === 'editor' && activeLab && activeLayout && (
             <EditorRibbon
+              canUndo={history.length > 0}
+              onUndo={handleUndo}
+              canRedo={future.length > 0}
+              onRedo={handleRedo}
               selectedBlock={
                 activeLab.blocks.find((b) => b.id === selectedBlockId) || null
               }
@@ -1087,11 +1084,24 @@ export default function App() {
             </div>
           )}
 
-          {activeView === 'library' && activeLab && (
+          {activeView === 'editor' && activeLab && (
+            <EditorStatusBar
+              pageCount={pageCount}
+              blockCount={activeLab.blocks.length}
+              totalPoints={activeLab.blocks.reduce(
+                (sum, b) => (b.type === 'response' ? sum + (b.points || 0) : sum),
+                0
+              )}
+              zoom={zoom}
+              onChangeZoom={setZoom}
+            />
+          )}
+
+          {activeView === 'library' && (
             <LibraryView
               courses={workspace.courses}
               labs={workspace.labs}
-              activeLabId={activeLab.id}
+              activeLabId={activeLab?.id || ''}
               onOpenLab={(id) => {
                 commitWorkspace((prev) => ({ ...prev, activeLabId: id }), false);
                 setSelectedBlockId(null);
@@ -1099,7 +1109,7 @@ export default function App() {
               }}
               onOpenNewLab={(cid) =>
                 setNewLabCourseId(
-                  cid || activeLab.courseId || workspace.courses[0]?.id || ''
+                  cid || activeLab?.courseId || workspace.courses[0]?.id || ''
                 )
               }
               onOpenNewCourse={() => setShowNewCourseModal(true)}
@@ -1107,6 +1117,7 @@ export default function App() {
               onDuplicateLab={handleDuplicateLab}
               onDeleteLab={handleDeleteLab}
               onOpenCourseSetup={() => openSetupSection('layouts')}
+              onLoadSampleWorkspace={handleLoadSampleWorkspace}
             />
           )}
 

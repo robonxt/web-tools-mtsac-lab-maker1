@@ -31,7 +31,7 @@ export class LocalStorageWorkspaceRepository implements WorkspaceRepository {
         !Array.isArray(parsed.courses) ||
         !Array.isArray(parsed.labs) ||
         !Array.isArray(parsed.layoutProfiles) ||
-        parsed.labs.length === 0
+        parsed.layoutProfiles.length === 0
       ) {
         return fallback();
       }

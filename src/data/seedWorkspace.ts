@@ -1,4 +1,39 @@
 import { WorkspaceState } from '../types/lab';
+import { DEFAULT_PAGE_SETUP } from '../lib/pageGeometry';
+
+/**
+ * Clean empty workspace for new users starting from scratch.
+ * Includes one neutral default layout profile so new courses/labs work immediately.
+ */
+export function createEmptyWorkspace(): WorkspaceState {
+  return {
+    schemaVersion: 1,
+    globalVariables: {},
+    layoutProfiles: [
+      {
+        id: 'layout_default',
+        name: 'Standard Academic',
+        professorName: '',
+        department: '',
+        headerVariant: 'editorial',
+        fontFamily: 'sans',
+        accentColor: '#1D4ED8',
+        stepStyle: 'stepped',
+        density: 'comfortable',
+        headerSpacing: 'normal',
+        blockSpacing: 'normal',
+        showPageNumbers: true,
+        footerTemplate: '{{course_code}} · {{lab_number}} · {{semester}}',
+        codePrintTheme: 'light',
+        pageSetup: { ...DEFAULT_PAGE_SETUP, margins: { ...DEFAULT_PAGE_SETUP.margins } },
+      },
+    ],
+    courses: [],
+    modules: [],
+    labs: [],
+    activeLabId: '',
+  };
+}
 
 export function createSeedWorkspace(): WorkspaceState {
   return {

@@ -20,11 +20,13 @@ import {
   MessageSquareText,
   Minus,
   Plus,
+  Redo2,
   Scissors,
   Sigma,
   Table2,
   Trash2,
   Type,
+  Undo2,
 } from 'lucide-react';
 import {
   CalloutVariant,
@@ -36,6 +38,10 @@ import {
 } from '../types/lab';
 
 interface EditorRibbonProps {
+  canUndo: boolean;
+  onUndo: () => void;
+  canRedo: boolean;
+  onRedo: () => void;
   selectedBlock: LabBlock | null;
   selectedIndex: number;
   totalBlocks: number;
@@ -135,6 +141,10 @@ function applyFormatToFocusedField(prefix: string, suffix: string, fallback: str
 }
 
 export const EditorRibbon: React.FC<EditorRibbonProps> = ({
+  canUndo,
+  onUndo,
+  canRedo,
+  onRedo,
   selectedBlock,
   selectedIndex,
   totalBlocks,
@@ -182,6 +192,32 @@ export const EditorRibbon: React.FC<EditorRibbonProps> = ({
       aria-label="Document formatting and block ribbon"
       className="shrink-0 bg-[#F8FAFC] border-b border-slate-200 px-3 py-1.5 flex items-center gap-2 overflow-x-auto select-none"
     >
+      {/* Undo / Redo */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-label="Undo"
+          title="Undo (Ctrl+Z)"
+          className="min-h-[34px] min-w-[34px] p-1.5 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none rounded-md transition-colors cursor-pointer"
+        >
+          <Undo2 className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-label="Redo"
+          title="Redo (Ctrl+Shift+Z)"
+          className="min-h-[34px] min-w-[34px] p-1.5 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none rounded-md transition-colors cursor-pointer"
+        >
+          <Redo2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      <span className="h-6 w-px bg-slate-200 shrink-0" aria-hidden="true" />
+
       {/* Group 1: Insert Blocks */}
       <div className="flex items-center gap-1 shrink-0">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-1 hidden xl:inline">

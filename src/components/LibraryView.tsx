@@ -23,6 +23,7 @@ interface LibraryViewProps {
   onDuplicateLab: (labId: string) => void;
   onDeleteLab: (labId: string) => void;
   onOpenCourseSetup: () => void;
+  onLoadSampleWorkspace: () => void;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -42,6 +43,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onDuplicateLab,
   onDeleteLab,
   onOpenCourseSetup,
+  onLoadSampleWorkspace,
 }) => {
   const [query, setQuery] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -98,7 +100,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
             <button
               type="button"
               onClick={() => onOpenNewLab(courses[0]?.id)}
-              className="inline-flex items-center gap-1.5 min-h-[36px] px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-md transition-colors cursor-pointer"
+              disabled={courses.length === 0}
+              className="inline-flex items-center gap-1.5 min-h-[36px] px-3.5 py-1.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:pointer-events-none rounded-md transition-colors cursor-pointer"
             >
               <FilePlus2 className="w-3.5 h-3.5" />
               New Document
@@ -106,23 +109,57 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative max-w-md">
-          <Search
-            className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-            aria-hidden="true"
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search courses, lab numbers, titles, or semesters..."
-            className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
-          />
-        </div>
+        {courses.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-10 text-center space-y-4 shadow-2xs">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center mx-auto">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div className="space-y-1 max-w-md mx-auto">
+              <h2 className="text-base font-bold text-slate-900">
+                Welcome to LabPress
+              </h2>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Start by creating your first course, or load a sample course to explore layouts, variables, and student/answer-key exports.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={onOpenNewCourse}
+                className="inline-flex items-center gap-1.5 min-h-[38px] px-4 py-2 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-md transition-colors cursor-pointer"
+              >
+                <FolderPlus className="w-4 h-4" />
+                Create First Course
+              </button>
+              <button
+                type="button"
+                onClick={onLoadSampleWorkspace}
+                className="inline-flex items-center gap-1.5 min-h-[38px] px-4 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200/80 rounded-md transition-colors cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-slate-500" />
+                Load Sample Course
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Search Bar */}
+            <div className="relative max-w-md">
+              <Search
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search courses, lab numbers, titles, or semesters..."
+                className="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
+              />
+            </div>
 
-        {/* Course Sections */}
-        <div className="space-y-6">
+            {/* Course Sections */}
+            <div className="space-y-6">
           {courses.map((course) => {
             const courseLabs = filteredLabs.filter((l) => l.courseId === course.id);
             if (query.trim() && courseLabs.length === 0) return null;
@@ -261,7 +298,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </section>
             );
           })}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
