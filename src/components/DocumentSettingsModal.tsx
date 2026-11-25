@@ -218,67 +218,28 @@ export const DocumentSettingsModal: React.FC<DocumentSettingsModalProps> = ({
 
           {activeTab === 'layout' && (
             <div className="space-y-5">
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-500">Page Layout</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenCourseSetup('layouts');
-                    }}
-                    className="text-[11px] font-medium text-blue-700 hover:underline cursor-pointer"
-                  >
-                    Course Setup
-                  </button>
-                </div>
-
-                <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 space-y-1">
-                  <div className="text-xs font-semibold text-slate-900">{effectiveLayout.name}</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-slate-900">Page Setup</div>
                   <div className="text-[11px] text-slate-500">
-                    {hasOverride
-                      ? 'Custom override for this document only'
-                      : `Inherited automatically from ${course?.code || 'course'}`}
+                    Paper size, orientation, and margins for this document
                   </div>
                 </div>
-
-                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasOverride}
-                    onChange={(e) =>
-                      onUpdateLab({
-                        layoutOverrideId: e.target.checked ? inheritedLayout.id : null,
-                      })
-                    }
-                    className="rounded border-slate-300"
-                  />
-                  Use a different layout for this sheet only
-                </label>
-
-                {hasOverride && (
-                  <select
-                    value={lab.layoutOverrideId || inheritedLayout.id}
-                    onChange={(e) =>
-                      onUpdateLab({
-                        layoutOverrideId: e.target.value,
-                        layoutProfileId: e.target.value,
-                      })
-                    }
-                    className="w-full text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:border-blue-600"
-                  >
-                    {layoutProfiles.map((lp) => (
-                      <option key={lp.id} value={lp.id}>
-                        {lp.name} ({lp.professorName})
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenCourseSetup('layouts');
+                  }}
+                  className="text-[11px] font-medium text-blue-700 hover:underline cursor-pointer shrink-0"
+                >
+                  Customize Style
+                </button>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 space-y-2.5">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-500">Page Setup</span>
+                  <span className="text-[11px] font-semibold text-slate-500">Paper &amp; Margins</span>
                   {hasPageOverride ? (
                     <button
                       type="button"
@@ -286,10 +247,10 @@ export const DocumentSettingsModal: React.FC<DocumentSettingsModalProps> = ({
                       className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-900 cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      Reset to layout
+                      Reset to default
                     </button>
                   ) : (
-                    <span className="text-[11px] text-slate-400">From layout</span>
+                    <span className="text-[11px] text-slate-400">Default</span>
                   )}
                 </div>
 
@@ -305,7 +266,7 @@ export const DocumentSettingsModal: React.FC<DocumentSettingsModalProps> = ({
                     onClick={() => onSavePageSetupToLayout(effectivePageSetup)}
                     className="w-full py-2 px-3 text-xs font-medium text-blue-700 bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/80 rounded-md transition-colors cursor-pointer"
                   >
-                    Save as default for {effectiveLayout.name}
+                    Save as default page setup
                   </button>
                 )}
               </div>

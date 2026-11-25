@@ -754,16 +754,37 @@ export default function App() {
   };
 
   const handleDeleteLab = (labId: string) => {
-    if (workspace.labs.length <= 1) return;
     commitWorkspace((prev) => {
       const remaining = prev.labs.filter((l) => l.id !== labId);
       return {
         ...prev,
         labs: remaining,
-        activeLabId: prev.activeLabId === labId ? remaining[0].id : prev.activeLabId,
+        activeLabId:
+          prev.activeLabId === labId ? remaining[0]?.id || '' : prev.activeLabId,
       };
     });
+    if (activeLab?.id === labId && workspace.labs.length <= 1) {
+      setSelectedBlockId(null);
+      setActiveView('library');
+    }
     showToast('Deleted document');
+  };
+
+  const handleDeleteCourse = (courseId: string) => {
+    const target = workspace.courses.find((c) => c.id === courseId);
+    commitWorkspace((prev) => {
+      const remainingCourses = prev.courses.filter((c) => c.id !== courseId);
+      const remainingLabs = prev.labs.filter((l) => l.courseId !== courseId);
+      const activeStillExists = remainingLabs.some((l) => l.id === prev.activeLabId);
+      return {
+        ...prev,
+        courses: remainingCourses,
+        labs: remainingLabs,
+        activeLabId: activeStillExists ? prev.activeLabId : remainingLabs[0]?.id || '',
+      };
+    });
+    setSelectedBlockId(null);
+    showToast(target ? `Deleted course ${target.code}` : 'Deleted course');
   };
 
   /* --------------------------- Snapshot Operations -------------------------- */
@@ -1114,6 +1135,7 @@ export default function App() {
               onOpenRolloverCourse={(cid) => setRolloverCourseId(cid)}
               onDuplicateLab={handleDuplicateLab}
               onDeleteLab={handleDeleteLab}
+              onDeleteCourse={handleDeleteCourse}
               onOpenCourseSetup={() => openSetupSection('layouts')}
               onLoadSampleWorkspace={handleLoadSampleWorkspace}
             />

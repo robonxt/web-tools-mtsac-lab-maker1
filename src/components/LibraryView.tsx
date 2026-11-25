@@ -22,6 +22,7 @@ interface LibraryViewProps {
   onOpenRolloverCourse: (courseId: string) => void;
   onDuplicateLab: (labId: string) => void;
   onDeleteLab: (labId: string) => void;
+  onDeleteCourse: (courseId: string) => void;
   onOpenCourseSetup: () => void;
   onLoadSampleWorkspace: () => void;
 }
@@ -42,11 +43,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onOpenRolloverCourse,
   onDuplicateLab,
   onDeleteLab,
+  onDeleteCourse,
   onOpenCourseSetup,
   onLoadSampleWorkspace,
 }) => {
   const [query, setQuery] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteCourseId, setConfirmDeleteCourseId] = useState<string | null>(null);
 
   const filteredLabs = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -202,6 +205,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       <FilePlus2 className="w-3.5 h-3.5" />
                       Add Doc
                     </button>
+                    {confirmDeleteCourseId === course.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteCourse(course.id);
+                          setConfirmDeleteCourseId(null);
+                        }}
+                        className="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md cursor-pointer"
+                      >
+                        Confirm Delete
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteCourseId(course.id)}
+                        title="Delete course and its documents"
+                        className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -266,28 +290,26 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                             >
                               <Copy className="w-3.5 h-3.5" />
                             </button>
-                            {labs.length > 1 && (
-                              isConfirmingDelete ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onDeleteLab(lab.id);
-                                    setConfirmDeleteId(null);
-                                  }}
-                                  className="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md cursor-pointer"
-                                >
-                                  Confirm
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteId(lab.id)}
-                                  title="Delete document"
-                                  className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )
+                            {confirmDeleteId === lab.id ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onDeleteLab(lab.id);
+                                  setConfirmDeleteId(null);
+                                }}
+                                className="min-h-[32px] px-2.5 py-1 text-[11px] font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(lab.id)}
+                                title="Delete document"
+                                className="min-h-[32px] min-w-[32px] p-1.5 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             )}
                           </div>
                         </div>

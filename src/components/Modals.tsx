@@ -1288,21 +1288,6 @@ export const NewCourseModal: React.FC<NewCourseModalProps> = ({
               className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
             />
           </label>
-
-          <label className="block space-y-1">
-            <span className="text-xs font-medium text-slate-600">Default Layout Profile</span>
-            <select
-              value={defaultLayoutId}
-              onChange={(e) => setDefaultLayoutId(e.target.value)}
-              className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
-            >
-              {layoutProfiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.professorName})
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
