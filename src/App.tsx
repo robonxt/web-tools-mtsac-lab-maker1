@@ -35,6 +35,7 @@ import {
   triggerFileDownload,
 } from './lib/exporter';
 import { LeftDrawerMode, WorkspaceBar } from './components/WorkspaceBar';
+import { EditorRibbon } from './components/EditorRibbon';
 import { Sidebar } from './components/Sidebar';
 import { InsertDrawer } from './components/InsertDrawer';
 import { PaperCanvas } from './components/PaperCanvas';
@@ -1000,6 +1001,21 @@ export default function App() {
 
         {/* Workspace Content Area */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {activeView === 'editor' && activeLab && activeLayout && (
+            <EditorRibbon
+              selectedBlock={
+                activeLab.blocks.find((b) => b.id === selectedBlockId) || null
+              }
+              selectedIndex={activeLab.blocks.findIndex((b) => b.id === selectedBlockId)}
+              totalBlocks={activeLab.blocks.length}
+              modules={workspace.modules}
+              onInsertBlock={handleSmartInsert}
+              onUpdateBlock={handleUpdateBlock}
+              onMoveBlock={handleMoveBlock}
+              onDuplicateBlock={handleDuplicateBlock}
+              onDeleteBlock={handleDeleteBlock}
+            />
+          )}
           {activeView === 'editor' && activeLab && activeLayout && (
             <div className="flex-1 flex min-h-0 overflow-hidden relative">
               {/* On-Demand Left Drawer Slot: Files OR Drag-and-Drop Insert Palette */}
