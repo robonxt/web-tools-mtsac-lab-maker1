@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckSquare,
@@ -65,6 +65,40 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [showModules, setShowModules] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setShowModules(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setShowModules(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const toggleOpen = () => {
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceAbove = rect.top - 110; // Account for top bar + ribbon
+      const spaceBelow = window.innerHeight - rect.bottom - 40;
+      setOpenUpward(variant === 'footer' ? spaceAbove >= 360 || spaceBelow < 320 : spaceBelow < 340 && spaceAbove > spaceBelow);
+    }
+    setOpen((v) => !v);
+  };
 
   const pick = (type: LabBlockType, moduleId?: string) => {
     onInsert(type, moduleId);
@@ -74,6 +108,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
 
   return (
     <div
+      ref={containerRef}
       className={`relative ${
         variant === 'divider'
           ? 'group/ins h-4 -my-1.5 flex items-center justify-center'
@@ -86,7 +121,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
           <span className="flex-1 h-px bg-blue-200/80" />
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={toggleOpen}
             className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 rounded-md shadow-2xs transition-colors cursor-pointer"
           >
             <Plus className="w-3 h-3" />
@@ -97,7 +132,7 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
       ) : (
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggleOpen}
           className="w-full py-3 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-700 border border-dashed border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 rounded-md transition-colors cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -107,8 +142,8 @@ export const AddBlockMenu: React.FC<AddBlockMenuProps> = ({
 
       {open && (
         <div
-          className={`absolute left-1/2 -translate-x-1/2 z-40 w-[440px] max-w-[92vw] bg-white border border-slate-200 rounded-lg shadow-xl p-3 space-y-3 ${
-            variant === 'footer' ? 'bottom-full mb-2' : 'top-full mt-1.5'
+          className={`absolute left-1/2 -translate-x-1/2 z-40 w-[440px] max-w-[92vw] max-h-[min(70vh,420px)] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-xl p-3 space-y-3 ${
+            openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
           }`}
         >
           <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
