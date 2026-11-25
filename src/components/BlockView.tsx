@@ -210,11 +210,17 @@ export const BlockView: React.FC<BlockViewProps> = ({
           <p
             className={`${compact ? 'text-[14px]' : 'text-[15px]'} leading-relaxed text-slate-800 whitespace-pre-line break-words`}
           >
-            <InlineRichText
-              text={block.text}
-              variables={variables}
-              showRawTokens={showRawTokens}
-            />
+            {block.text.trim() ? (
+              <InlineRichText
+                text={block.text}
+                variables={variables}
+                showRawTokens={showRawTokens}
+              />
+            ) : !readOnly && !printMode ? (
+              <span className="text-slate-300 italic text-xs">
+                Empty text block — click to write
+              </span>
+            ) : null}
           </p>
         );
       }

@@ -20,6 +20,7 @@ import {
 } from '../lib/pageGeometry';
 import {
   clearActiveDrag,
+  getActiveDragPayload,
   hasLabPressDrag,
   readDragPayload,
   resolveDropEffect,
@@ -172,8 +173,19 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     return () => window.cancelAnimationFrame(rafId);
   }, [selectedBlockId, readOnly, printMode]);
 
-  const setDropIndicatorSafe = useCallback((next: DropIndicator | null) => {
-    setDropIndicator((prev) => {
+  const setDropIndicatorSafe = useCallback(
+    (next: DropIndicator | null) => {
+      if (next) {
+        const activeDrag = getActiveDragPayload();
+        if (activeDrag?.kind === 'move-block') {
+          const fromIdx = lab.blocks.findIndex((b) => b.id === activeDrag.blockId);
+          if (fromIdx >= 0 && (next.targetIndex === fromIdx || next.targetIndex === fromIdx + 1)) {
+            setDropIndicator(null);
+            return;
+          }
+        }
+      }
+      setDropIndicator((prev) => {
       if (prev === next) return prev;
       if (!prev || !next) return next;
       if (prev.kind !== next.kind || prev.targetIndex !== next.targetIndex) return next;
@@ -194,7 +206,9 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
       }
       return next;
     });
-  }, []);
+    },
+    [lab.blocks]
+  );
 
   const isTypingInsideSelectedBlock = useCallback(() => {
     if (!selectedBlockId || readOnly) return false;
