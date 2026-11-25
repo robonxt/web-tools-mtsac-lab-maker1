@@ -26,7 +26,6 @@ import {
 } from '../lib/dnd';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
 import { BlockView } from './BlockView';
-import { AddBlockMenu } from './AddBlockMenu';
 
 type DropIndicator =
   | { kind: 'block'; entryKey: string; edge: 'top' | 'bottom'; targetIndex: number }
@@ -963,7 +962,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                         dropIndicator.pageNumber === page.pageNumber
                           ? 'Drop here to place on this page'
                           : isFirstPage
-                            ? 'Drag a block here or click + Add in the toolbar to start writing.'
+                            ? 'Use the Insert ribbon above to add a section, or type / in a text block.'
                             : 'Blank page after page break. Drag a block here or remove the break above.'}
                       </div>
                     ) : (
@@ -1018,17 +1017,6 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                           >
                             {showTopLine && renderDropLineOverlay('top')}
 
-                            {!readOnly && onInsertBlockAt && idxInPage === 0 && isFirstPage && (
-                              <div className="mb-1.5">
-                                <AddBlockMenu
-                                  variant="divider"
-                                  modules={modules}
-                                  onInsert={(type, modId) =>
-                                    onInsertBlockAt(page.insertStartIndex, type, modId)
-                                  }
-                                />
-                              </div>
-                            )}
                             <BlockView
                               block={block}
                               index={originalIndex}
@@ -1062,49 +1050,11 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                               onEditMasterModule={onEditMasterModule}
                               onDetachModule={onDetachModule}
                             />
-                            {!readOnly && onInsertBlockAt && isLastSliceOfBlock && (
-                              <div className="mt-1.5">
-                                <AddBlockMenu
-                                  variant="divider"
-                                  modules={modules}
-                                  onInsert={(type, modId) =>
-                                    onInsertBlockAt(originalIndex + 1, type, modId)
-                                  }
-                                />
-                              </div>
-                            )}
 
                             {showBottomLine && renderDropLineOverlay('bottom')}
                           </div>
                         );
                       })
-                    )}
-
-                    {/* Bottom "+ Add" button on the final page */}
-                    {isLastPage && !readOnly && !printMode && onInsertBlockAt && (
-                      <div
-                        onDragOver={(e) => {
-                          if (!hasLabPressDrag(e.dataTransfer)) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          isDraggingRef.current = true;
-                          e.dataTransfer.dropEffect = resolveDropEffect(e.dataTransfer);
-                          setDropIndicatorSafe({
-                            kind: page.entries.length === 0 ? 'page-empty' : 'page-end',
-                            pageNumber: page.pageNumber,
-                            targetIndex: page.insertEndIndex,
-                          });
-                        }}
-                        onDrop={(e) => handleDropAtIndex(e, page.insertEndIndex)}
-                      >
-                        <AddBlockMenu
-                          variant="footer"
-                          modules={modules}
-                          onInsert={(type, modId) =>
-                            onInsertBlockAt(page.insertEndIndex, type, modId)
-                          }
-                        />
-                      </div>
                     )}
                   </div>
 
