@@ -12,6 +12,7 @@ import {
   History,
   KeyRound,
   Layers,
+  ListTree,
   Minus,
   MoreHorizontal,
   Palette,
@@ -32,7 +33,7 @@ import { MissingVariableIssue } from '../lib/variables';
 import { formatPageSetupSummary, PAPER_SIZES } from '../lib/pageGeometry';
 import { PageSetupControls } from './PageSetupControls';
 
-export type LeftDrawerMode = 'none' | 'files' | 'insert';
+export type LeftDrawerMode = 'none' | 'outline';
 
 const ZOOM_STEPS = [65, 75, 85, 100, 115, 125, 140];
 
@@ -47,10 +48,10 @@ interface WorkspaceBarProps {
   savedLabel: string;
   missingVariables: MissingVariableIssue[];
   onOpenVariables: () => void;
-  leftDrawer: LeftDrawerMode;
-  onToggleLeftDrawer: (mode: Exclude<LeftDrawerMode, 'none'>) => void;
-  showSettingsDrawer: boolean;
-  onToggleSettingsDrawer: () => void;
+  showOutline: boolean;
+  onToggleOutline: () => void;
+  showDocumentSettings: boolean;
+  onOpenDocumentSettings: () => void;
   canUndo: boolean;
   onUndo: () => void;
   canRedo: boolean;
@@ -91,10 +92,10 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
   savedLabel,
   missingVariables,
   onOpenVariables,
-  leftDrawer,
-  onToggleLeftDrawer,
-  showSettingsDrawer,
-  onToggleSettingsDrawer,
+  showOutline,
+  onToggleOutline,
+  showDocumentSettings,
+  onOpenDocumentSettings,
   canUndo,
   onUndo,
   canRedo,
@@ -180,6 +181,57 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
     }
   };
 
+  /* --------------------------- Library Mode Bar --------------------------- */
+  if (activeView === 'library') {
+    return (
+      <header className="h-[52px] shrink-0 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-4 select-none">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => onChangeView('editor')}
+            title="LabPress — Back to Editor"
+            className="w-8 h-8 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+          >
+            L
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeView('editor')}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+            Back to Editor
+          </button>
+
+          <span className="h-4 w-px bg-slate-200 hidden sm:block" aria-hidden="true" />
+          <span className="text-xs font-semibold text-slate-900 hidden sm:inline whitespace-nowrap">
+            Courses &amp; Documents Library
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onChangeView('setup')}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+            Course Setup
+          </button>
+          <button
+            type="button"
+            onClick={onOpenExport}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export
+          </button>
+        </div>
+      </header>
+    );
+  }
+
   /* --------------------------- Course Setup Mode Bar --------------------------- */
   if (activeView === 'setup') {
     return (
@@ -256,12 +308,12 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
   /* ------------------------------ Editor Mode Bar ------------------------------ */
   return (
     <header className="h-[52px] shrink-0 bg-white border-b border-slate-200 px-3 flex items-center justify-between gap-2 select-none">
-      {/* Left Cluster: Brand Mark, Files, Prominent Accented + Add, Undo/Redo, Doc Name */}
+      {/* Left Cluster: Brand Mark, Library, Outline, Undo/Redo, Doc Name */}
       <div className="flex items-center gap-1.5 min-w-0">
         <button
           type="button"
-          onClick={() => onToggleLeftDrawer('files')}
-          title="LabPress"
+          onClick={() => onChangeView('library')}
+          title="Courses & Documents Library"
           className="w-8 h-8 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm flex items-center justify-center transition-colors shrink-0 cursor-pointer"
         >
           L
@@ -269,31 +321,26 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
 
         <button
           type="button"
-          onClick={() => onToggleLeftDrawer('files')}
-          title="Courses, documents & outline"
+          onClick={() => onChangeView('library')}
+          title="Courses & Documents Library"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+        >
+          <FolderOpen className="w-4 h-4 text-slate-500" />
+          Library
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleOutline}
+          title="Toggle Document Outline"
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-            leftDrawer === 'files'
-              ? 'bg-slate-100 text-slate-900'
+            showOutline
+              ? 'bg-blue-50 text-blue-700 border border-blue-200/80'
               : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
           }`}
         >
-          <FolderOpen className="w-4 h-4 text-slate-500" />
-          Files
-        </button>
-
-        {/* Prominent Accented + Add Trigger (Opens Drag-and-Drop Insert Drawer) */}
-        <button
-          type="button"
-          onClick={() => onToggleLeftDrawer('insert')}
-          title="Insert blocks or drag shared modules onto pages"
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-            leftDrawer === 'insert'
-              ? 'bg-blue-800 text-white ring-2 ring-blue-300'
-              : 'bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white'
-          }`}
-        >
-          <Plus className="w-4 h-4 stroke-[2.4]" />
-          Add
+          <ListTree className="w-4 h-4" />
+          <span className="hidden sm:inline">Outline</span>
         </button>
 
         <span className="h-5 w-px bg-slate-200 mx-1 shrink-0" aria-hidden="true" />
@@ -589,11 +636,11 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
 
         <button
           type="button"
-          onClick={onToggleSettingsDrawer}
+          onClick={onOpenDocumentSettings}
           aria-label="Document settings"
           title="Document settings & snapshots"
           className={`hidden xl:inline-flex p-1.5 rounded-md transition-colors shrink-0 cursor-pointer ${
-            showSettingsDrawer
+            showDocumentSettings
               ? 'bg-slate-100 text-slate-900'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -686,7 +733,7 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
                 role="menuitem"
                 onClick={() => {
                   setShowOverflowMenu(false);
-                  onToggleSettingsDrawer();
+                  onOpenDocumentSettings();
                 }}
                 className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
               >

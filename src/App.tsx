@@ -34,12 +34,12 @@ import {
   slugifyFilename,
   triggerFileDownload,
 } from './lib/exporter';
-import { LeftDrawerMode, WorkspaceBar } from './components/WorkspaceBar';
+import { WorkspaceBar } from './components/WorkspaceBar';
 import { EditorRibbon } from './components/EditorRibbon';
-import { Sidebar } from './components/Sidebar';
-import { InsertDrawer } from './components/InsertDrawer';
+import { LibraryView } from './components/LibraryView';
+import { OutlineRail } from './components/OutlineRail';
 import { PaperCanvas } from './components/PaperCanvas';
-import { DetailsDrawer } from './components/DetailsDrawer';
+import { DocumentSettingsModal } from './components/DocumentSettingsModal';
 import { CourseSetupView } from './components/CourseSetupView';
 import {
   ExportModal,
@@ -70,8 +70,8 @@ export default function App() {
   const [pageCount, setPageCount] = useState(1);
 
   // Calm Google Docs defaults: drawers start closed so the paper sheets own the canvas
-  const [leftDrawer, setLeftDrawer] = useState<LeftDrawerMode>('none');
-  const [showDetailsDrawer, setShowDetailsDrawer] = useState(false);
+  const [showOutline, setShowOutline] = useState(false);
+  const [showDocumentSettings, setShowDocumentSettings] = useState(false);
 
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [focusedModuleId, setFocusedModuleId] = useState<string | null>(null);
@@ -306,8 +306,8 @@ export default function App() {
     setActiveView('setup');
   }, []);
 
-  const toggleLeftDrawer = useCallback((mode: Exclude<LeftDrawerMode, 'none'>) => {
-    setLeftDrawer((prev) => (prev === mode ? 'none' : mode));
+  const toggleOutline = useCallback(() => {
+    setShowOutline((prev) => !prev);
   }, []);
 
   /* ----------------------------- Lab Operations ----------------------------- */
@@ -626,7 +626,6 @@ export default function App() {
     setNewLabCourseId(null);
     setSelectedBlockId(null);
     setActiveView('editor');
-    setLeftDrawer('none');
     showToast(`Created ${newLab.labNumber}: ${newLab.title}`);
   };
 
@@ -974,10 +973,10 @@ export default function App() {
             savedLabel={savedLabel}
             missingVariables={missingVariables}
             onOpenVariables={() => openSetupSection('variables')}
-            leftDrawer={leftDrawer}
-            onToggleLeftDrawer={toggleLeftDrawer}
-            showSettingsDrawer={showDetailsDrawer}
-            onToggleSettingsDrawer={() => setShowDetailsDrawer((v) => !v)}
+            showOutline={showOutline}
+            onToggleOutline={toggleOutline}
+            showDocumentSettings={showDocumentSettings}
+            onOpenDocumentSettings={() => setShowDocumentSettings(true)}
             canUndo={history.length > 0}
             onUndo={handleUndo}
             canRedo={future.length > 0}
@@ -1018,42 +1017,19 @@ export default function App() {
           )}
           {activeView === 'editor' && activeLab && activeLayout && (
             <div className="flex-1 flex min-h-0 overflow-hidden relative">
-              {/* On-Demand Left Drawer Slot: Files OR Drag-and-Drop Insert Palette */}
-              {leftDrawer === 'files' && (
-                <Sidebar
-                  courses={workspace.courses}
-                  labs={workspace.labs}
+              {/* On-Demand Left Document Outline Rail */}
+              {showOutline && (
+                <OutlineRail
+                  lab={activeLab}
                   modules={workspace.modules}
-                  activeLabId={activeLab.id}
-                  onSelectLab={(id) => {
-                    commitWorkspace((prev) => ({ ...prev, activeLabId: id }), false);
-                    setSelectedBlockId(null);
-                  }}
-                  onOpenNewLab={(cid) =>
-                    setNewLabCourseId(
-                      cid || activeLab.courseId || workspace.courses[0]?.id || ''
-                    )
-                  }
-                  onOpenNewCourse={() => setShowNewCourseModal(true)}
-                  onOpenRolloverCourse={(cid) => setRolloverCourseId(cid)}
-                  onDuplicateLab={handleDuplicateLab}
-                  onDeleteLab={handleDeleteLab}
+                  selectedBlockId={selectedBlockId}
                   onJumpToBlock={(blockId) => {
                     setSelectedBlockId(blockId);
                     document
                       .getElementById(`block-${blockId}`)
                       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }}
-                  onClose={() => setLeftDrawer('none')}
-                />
-              )}
-
-              {leftDrawer === 'insert' && (
-                <InsertDrawer
-                  modules={workspace.modules}
-                  onInsert={handleSmartInsert}
-                  onManageModules={() => openSetupSection('modules')}
-                  onClose={() => setLeftDrawer('none')}
+                  onClose={() => setShowOutline(false)}
                 />
               )}
 
@@ -1085,9 +1061,9 @@ export default function App() {
                 onDetachModule={handleDetachModule}
               />
 
-              {/* On-Demand Right Document Settings Drawer */}
-              {showDetailsDrawer && (
-                <DetailsDrawer
+              {/* Document Settings Modal */}
+              {showDocumentSettings && (
+                <DocumentSettingsModal
                   lab={activeLab}
                   courses={workspace.courses}
                   layoutProfiles={workspace.layoutProfiles}
@@ -1105,10 +1081,33 @@ export default function App() {
                     setActiveDiff({ labId: activeLab.id, snapshot: snap })
                   }
                   onOpenCourseSetup={(sec) => openSetupSection(sec)}
-                  onClose={() => setShowDetailsDrawer(false)}
+                  onClose={() => setShowDocumentSettings(false)}
                 />
               )}
             </div>
+          )}
+
+          {activeView === 'library' && activeLab && (
+            <LibraryView
+              courses={workspace.courses}
+              labs={workspace.labs}
+              activeLabId={activeLab.id}
+              onOpenLab={(id) => {
+                commitWorkspace((prev) => ({ ...prev, activeLabId: id }), false);
+                setSelectedBlockId(null);
+                setActiveView('editor');
+              }}
+              onOpenNewLab={(cid) =>
+                setNewLabCourseId(
+                  cid || activeLab.courseId || workspace.courses[0]?.id || ''
+                )
+              }
+              onOpenNewCourse={() => setShowNewCourseModal(true)}
+              onOpenRolloverCourse={(cid) => setRolloverCourseId(cid)}
+              onDuplicateLab={handleDuplicateLab}
+              onDeleteLab={handleDeleteLab}
+              onOpenCourseSetup={() => openSetupSection('layouts')}
+            />
           )}
 
           {activeView === 'setup' && activeLab && activeLayout && (

@@ -1,4 +1,4 @@
-export type WorkspaceView = 'editor' | 'setup';
+export type WorkspaceView = 'library' | 'editor' | 'setup';
 
 export type SetupSection = 'layouts' | 'variables' | 'modules' | 'snapshots';
 
