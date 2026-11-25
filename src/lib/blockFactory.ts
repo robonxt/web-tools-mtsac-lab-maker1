@@ -54,6 +54,7 @@ export function createDefaultBlock(type: LabBlockType, moduleId?: string): LabBl
         title: 'Terminal Command',
         code: '# Example command\nls -la ~/labs/{{course_code}}',
         expectedOutput: 'total 16\ndrwxr-xr-x 2 student student 4096 ...',
+        showLineNumbers: true,
         audience: 'all',
       };
     case 'callout':
@@ -99,6 +100,26 @@ export function createDefaultBlock(type: LabBlockType, moduleId?: string): LabBl
           { id: createId('chk'), text: 'Connected to campus VPN or lab subnet' },
           { id: createId('chk'), text: 'Verified toolchain version matches {{semester}} syllabus' },
         ],
+      };
+    case 'image':
+      return {
+        id,
+        type: 'image',
+        src: '',
+        alt: 'Lab diagram or figure',
+        caption: 'Figure 1: System topology or experimental setup.',
+        width: 85,
+        align: 'center',
+        bordered: true,
+        audience: 'all',
+      };
+    case 'math':
+      return {
+        id,
+        type: 'math',
+        latex: 'T(n) = 2T\\left(\\frac{n}{2}\\right) + \\Theta(n) \\implies T(n) = \\Theta(n \\log n)',
+        label: '(1)',
+        audience: 'all',
       };
     case 'moduleRef':
       return {

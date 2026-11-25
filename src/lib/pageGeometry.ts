@@ -1,5 +1,6 @@
 import {
   AudienceMode,
+  BlockSlice,
   LabBlock,
   LabDocument,
   LayoutProfile,
@@ -196,9 +197,18 @@ export function formatPageSetupSummary(setup: PageSetup): string {
   return `${spec.shortLabel} · ${orient}`;
 }
 
+export interface SubItemHeights {
+  header: number;
+  items: number[];
+}
+
 export interface PaginatedEntry {
   block: LabBlock;
   originalIndex: number;
+  /** Unique React render key (distinguishes split slices of the same block) */
+  entryKey: string;
+  /** Optional slice range when a long Steps or Table block splits cleanly across pages */
+  slice?: BlockSlice;
 }
 
 export interface PaginatedPage {
@@ -231,6 +241,10 @@ function estimateFallbackHeight(block: LabBlock): number {
       return 74 + block.answerLines * 28;
     case 'checklist':
       return 54 + block.items.length * 28;
+    case 'image':
+      return block.src ? 260 : 120;
+    case 'math':
+      return 76;
     case 'moduleRef':
       return 150;
     case 'pageBreak':
@@ -238,30 +252,72 @@ function estimateFallbackHeight(block: LabBlock): number {
   }
 }
 
+function estimateSubItemHeights(block: LabBlock): SubItemHeights | null {
+  if (block.type === 'steps' && block.items.length > 1) {
+    return {
+      header: block.title ? 40 : 8,
+      items: block.items.map((item) => {
+        const bodyLines = Math.max(1, Math.ceil((item.body.length || 40) / 70));
+        return 30 + bodyLines * 22 + (item.checkpoint ? 38 : 0) + 14;
+      }),
+    };
+  }
+  if (block.type === 'table' && block.rows.length > 1) {
+    return {
+      header: (block.caption ? 26 : 0) + 38,
+      items: block.rows.map((row) => {
+        const longest = row.reduce((max, c) => Math.max(max, c.length), 0);
+        return Math.max(34, Math.ceil(longest / 26) * 20 + 14);
+      }),
+    };
+  }
+  return null;
+}
+
+function getMinimumLeadHeight(
+  block: LabBlock,
+  measuredHeights: Record<string, number>,
+  subItemHeights: Record<string, SubItemHeights>,
+  unsplittableBlockId?: string | null
+): number {
+  if (block.id !== unsplittableBlockId && (block.type === 'steps' || block.type === 'table')) {
+    const sub = subItemHeights[block.id] || estimateSubItemHeights(block);
+    if (sub && sub.items.length > 0) {
+      return sub.header + sub.items[0];
+    }
+  }
+  return measuredHeights[block.id] ?? estimateFallbackHeight(block);
+}
+
 /**
  * Pure WYSIWYG block pagination engine.
- * Packs visible blocks onto exact physical pages using live measured pixel heights,
- * respecting manual Page Break blocks and header/footer heights, while recording
- * exact lab.blocks slice offsets for multi-page drag-and-drop insertion.
+ * - Packs visible blocks onto exact physical pages using live measured pixel heights.
+ * - Prevents orphaned headings by keeping headings attached to their following block.
+ * - Splits oversized Steps and Table blocks cleanly across page boundaries (except while actively editing that block).
+ * - Preserves exact lab.blocks slice offsets for multi-page drag-and-drop insertion.
  */
 export function paginateBlocks(params: {
   blocks: LabBlock[];
   audienceMode: AudienceMode;
   measuredHeights: Record<string, number>;
+  subItemHeights?: Record<string, SubItemHeights>;
   headerHeightPx: number;
   geometry: ComputedPageGeometry;
   blockGapPx: number;
+  unsplittableBlockId?: string | null;
 }): PaginatedPage[] {
   const {
     blocks,
     audienceMode,
     measuredHeights,
+    subItemHeights = {},
     headerHeightPx,
     geometry,
     blockGapPx,
+    unsplittableBlockId = null,
   } = params;
 
-  const visibleEntries: PaginatedEntry[] = [];
+  const visibleEntries: Array<{ block: LabBlock; originalIndex: number }> = [];
   blocks.forEach((block, originalIndex) => {
     if (audienceMode === 'student' && block.audience === 'instructor') {
       return;
@@ -314,25 +370,137 @@ export function paginateBlocks(params: {
     overflowsSinglePage = false;
   };
 
-  for (const entry of visibleEntries) {
-    if (entry.block.type === 'pageBreak') {
-      pushCurrentPage(entry);
+  for (let vi = 0; vi < visibleEntries.length; vi++) {
+    const entry = visibleEntries[vi];
+    const { block, originalIndex } = entry;
+
+    if (block.type === 'pageBreak') {
+      pushCurrentPage({
+        block,
+        originalIndex,
+        entryKey: block.id,
+      });
       continue;
     }
 
-    const blockHeight = measuredHeights[entry.block.id] ?? estimateFallbackHeight(entry.block);
-    const neededGap = currentEntries.length > 0 ? blockGapPx : 0;
-
-    // Start a fresh page if this block won't fit on the remaining space
     const canStartNewPage =
       currentEntries.length > 0 || (pages.length === 0 && headerHeightPx > 0);
+    const neededGap = currentEntries.length > 0 ? blockGapPx : 0;
 
-    if (canStartNewPage && usedHeight + neededGap + blockHeight > currentLimit) {
-      pushCurrentPage(undefined, entry.originalIndex);
+    // 1. Splittable Steps / Table handling
+    const isSplittable =
+      block.id !== unsplittableBlockId &&
+      ((block.type === 'steps' && block.items.length > 1) ||
+        (block.type === 'table' && block.rows.length > 1));
+
+    if (isSplittable) {
+      const sub = subItemHeights[block.id] || estimateSubItemHeights(block);
+      const totalItems = block.type === 'steps' ? block.items.length : block.rows.length;
+      const itemHeights =
+        sub && sub.items.length === totalItems
+          ? sub.items
+          : estimateSubItemHeights(block)!.items;
+      const headerH = sub ? sub.header : estimateSubItemHeights(block)!.header;
+      const fullH = headerH + itemHeights.reduce((a, b) => a + b, 0);
+
+      // If the entire block fits cleanly on the current page, place it unsliced
+      if (usedHeight + neededGap + fullH <= currentLimit) {
+        currentEntries.push({
+          block,
+          originalIndex,
+          entryKey: block.id,
+        });
+        usedHeight += neededGap + fullH;
+        continue;
+      }
+
+      // Otherwise, slice across pages!
+      let cursor = 0;
+      while (cursor < totalItems) {
+        const gapNow = currentEntries.length > 0 ? blockGapPx : 0;
+        const canBreakNow =
+          currentEntries.length > 0 || (pages.length === 0 && headerHeightPx > 0);
+        const remaining = currentLimit - usedHeight - gapNow;
+        const minSliceHeight = headerH + itemHeights[cursor];
+
+        // If not even the header + 1 item fits on the current page, start a fresh page first
+        if (canBreakNow && minSliceHeight > remaining) {
+          pushCurrentPage(undefined, originalIndex);
+          continue;
+        }
+
+        const availForItems = currentLimit - usedHeight - (currentEntries.length > 0 ? blockGapPx : 0) - headerH;
+        let sliceHeight = 0;
+        let end = cursor;
+        while (end < totalItems) {
+          const h = itemHeights[end];
+          if (end > cursor && sliceHeight + h > availForItems) {
+            break;
+          }
+          sliceHeight += h;
+          end += 1;
+        }
+
+        const isWhole = cursor === 0 && end === totalItems;
+        const slice: BlockSlice | undefined = isWhole
+          ? undefined
+          : {
+              kind: block.type === 'steps' ? 'steps' : 'table',
+              start: cursor,
+              end,
+              total: totalItems,
+            };
+
+        const activeGap = currentEntries.length > 0 ? blockGapPx : 0;
+        currentEntries.push({
+          block,
+          originalIndex,
+          entryKey: slice ? `${block.id}::${slice.start}-${slice.end}` : block.id,
+          slice,
+        });
+        usedHeight += activeGap + headerH + sliceHeight;
+
+        if (usedHeight > currentLimit + 4) {
+          overflowsSinglePage = true;
+        }
+
+        cursor = end;
+        if (cursor < totalItems) {
+          pushCurrentPage(undefined, originalIndex);
+        }
+      }
+      continue;
+    }
+
+    // 2. Standard indivisible block height
+    const blockHeight = measuredHeights[block.id] ?? estimateFallbackHeight(block);
+
+    // 3. Orphan-heading keep-with-next protection
+    let keepWithNextExtra = 0;
+    if (block.type === 'heading' && vi + 1 < visibleEntries.length) {
+      const nextEntry = visibleEntries[vi + 1];
+      if (nextEntry.block.type !== 'pageBreak') {
+        const nextLeadH = getMinimumLeadHeight(
+          nextEntry.block,
+          measuredHeights,
+          subItemHeights,
+          unsplittableBlockId
+        );
+        // Reserve room for heading + gap + at least the lead portion of the following block (capped so huge blocks don't force an endless break)
+        keepWithNextExtra = blockGapPx + Math.min(nextLeadH, 160);
+      }
+    }
+
+    if (canStartNewPage && usedHeight + neededGap + blockHeight + keepWithNextExtra > currentLimit) {
+      pushCurrentPage(undefined, originalIndex);
     }
 
     const gapOnActivePage = currentEntries.length > 0 ? blockGapPx : 0;
-    currentEntries.push(entry);
+    currentEntries.push({
+      block,
+      originalIndex,
+      entryKey: block.id,
+    });
     usedHeight += gapOnActivePage + blockHeight;
 
     if (usedHeight > currentLimit + 4) {

@@ -16,6 +16,12 @@ export type StepStyle = 'numbered' | 'stepped' | 'minimal';
 
 export type DensityChoice = 'comfortable' | 'compact';
 
+export type CodePrintTheme = 'light' | 'dark';
+
+export type ImageWidthPreset = 40 | 65 | 85 | 100;
+
+export type ImageAlign = 'left' | 'center' | 'right';
+
 export type PageSizeId = 'letter' | 'a4' | 'legal' | 'a5' | 'tabloid';
 
 export type PageOrientation = 'portrait' | 'landscape';
@@ -49,6 +55,7 @@ export interface LayoutProfile {
   density: DensityChoice;
   showPageNumbers: boolean;
   footerTemplate: string;
+  codePrintTheme?: CodePrintTheme;
   pageSetup?: PageSetup;
 }
 
@@ -95,6 +102,7 @@ export interface CodeBlock extends BaseBlock {
   title: string;
   code: string;
   expectedOutput: string;
+  showLineNumbers?: boolean;
 }
 
 export type CalloutVariant = 'info' | 'tip' | 'caution' | 'prereq';
@@ -127,6 +135,22 @@ export interface ChecklistBlock extends BaseBlock {
   items: ChecklistItem[];
 }
 
+export interface ImageBlock extends BaseBlock {
+  type: 'image';
+  src: string;
+  alt: string;
+  caption: string;
+  width: ImageWidthPreset;
+  align: ImageAlign;
+  bordered: boolean;
+}
+
+export interface MathBlock extends BaseBlock {
+  type: 'math';
+  latex: string;
+  label: string;
+}
+
 export interface ModuleRefBlock extends BaseBlock {
   type: 'moduleRef';
   moduleId: string;
@@ -146,10 +170,19 @@ export type LabBlock =
   | TableBlock
   | ResponseBlock
   | ChecklistBlock
+  | ImageBlock
+  | MathBlock
   | ModuleRefBlock
   | PageBreakBlock;
 
 export type LabBlockType = LabBlock['type'];
+
+export interface BlockSlice {
+  kind: 'steps' | 'table';
+  start: number;
+  end: number;
+  total: number;
+}
 
 export interface ReusableModule {
   id: string;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AudienceMode,
+  CodePrintTheme,
   Course,
   DocKind,
   LabBlock,
@@ -23,10 +24,12 @@ import {
   createId,
   LabTemplateKind,
 } from './lib/blockFactory';
-import { buildVariableMap } from './lib/variables';
+import { buildVariableMap, findMissingVariablesInLab } from './lib/variables';
 import { resolvePageSetup } from './lib/pageGeometry';
 import {
+  exportCoursePacketZip,
   exportWorkspaceJson,
+  generateMarkdown,
   generateStandaloneHtml,
   slugifyFilename,
   triggerFileDownload,
@@ -41,9 +44,13 @@ import {
   ExportModal,
   NewCourseModal,
   NewLabModal,
+  SaveAsModuleModal,
+  SemesterRolloverModal,
   SnapshotDiffModal,
 } from './components/Modals';
 import { PrintView } from './components/PrintView';
+
+const HISTORY_COALESCE_MS = 650;
 
 export default function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() =>
@@ -56,6 +63,7 @@ export default function App() {
   const [setupSection, setSetupSection] = useState<SetupSection>('layouts');
   const [audienceMode, setAudienceMode] = useState<AudienceMode>('student');
   const [printEdition, setPrintEdition] = useState<AudienceMode>('student');
+  const [printCodeTheme, setPrintCodeTheme] = useState<CodePrintTheme>('light');
   const [showRawTokens, setShowRawTokens] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [pageCount, setPageCount] = useState(1);
@@ -72,12 +80,15 @@ export default function App() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [newLabCourseId, setNewLabCourseId] = useState<string | null>(null);
   const [showNewCourseModal, setShowNewCourseModal] = useState(false);
+  const [saveModuleBlock, setSaveModuleBlock] = useState<LabBlock | null>(null);
+  const [rolloverCourseId, setRolloverCourseId] = useState<string | null>(null);
   const [activeDiff, setActiveDiff] = useState<{ labId: string; snapshot: LabSnapshot } | null>(
     null
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
+  const lastHistoryGroupRef = useRef<{ key: string; ts: number } | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -103,6 +114,7 @@ export default function App() {
       const current = workspaceRef.current;
       const next = updater(current);
       if (recordHistory) {
+        lastHistoryGroupRef.current = null;
         setHistory((h) => [...h.slice(-24), current]);
         setFuture([]);
       }
@@ -111,8 +123,31 @@ export default function App() {
     []
   );
 
+  // Coalesces rapid typing inside the same block/header into one clean undo step
+  const commitGroupedWorkspace = useCallback(
+    (groupKey: string, updater: (prev: WorkspaceState) => WorkspaceState) => {
+      const now = Date.now();
+      const prevGroup = lastHistoryGroupRef.current;
+      const shouldRecord =
+        !prevGroup ||
+        prevGroup.key !== groupKey ||
+        now - prevGroup.ts > HISTORY_COALESCE_MS;
+
+      const current = workspaceRef.current;
+      const next = updater(current);
+      if (shouldRecord) {
+        setHistory((h) => [...h.slice(-24), current]);
+        setFuture([]);
+      }
+      lastHistoryGroupRef.current = { key: groupKey, ts: now };
+      setWorkspace(next);
+    },
+    []
+  );
+
   const handleUndo = useCallback(() => {
     if (history.length === 0) return;
+    lastHistoryGroupRef.current = null;
     const previous = history[history.length - 1];
     const current = workspaceRef.current;
     setHistory((h) => h.slice(0, -1));
@@ -123,6 +158,7 @@ export default function App() {
 
   const handleRedo = useCallback(() => {
     if (future.length === 0) return;
+    lastHistoryGroupRef.current = null;
     const next = future[0];
     const current = workspaceRef.current;
     setFuture((f) => f.slice(1));
@@ -131,8 +167,93 @@ export default function App() {
     showToast('Redid change');
   }, [future, showToast]);
 
+  const activeLab = useMemo(
+    () => workspace.labs.find((l) => l.id === workspace.activeLabId) || workspace.labs[0],
+    [workspace.labs, workspace.activeLabId]
+  );
+
+  const activeCourse = useMemo(
+    () => workspace.courses.find((c) => c.id === activeLab?.courseId),
+    [workspace.courses, activeLab]
+  );
+
+  const activeCourseLabs = useMemo(
+    () =>
+      activeCourse
+        ? workspace.labs.filter((l) => l.courseId === activeCourse.id)
+        : activeLab
+          ? [activeLab]
+          : [],
+    [workspace.labs, activeCourse, activeLab]
+  );
+
+  // Course-inherited layout consistency: use override only if explicitly enabled
+  const activeLayout = useMemo(() => {
+    const targetId =
+      activeLab?.layoutOverrideId ||
+      activeCourse?.defaultLayoutId ||
+      activeLab?.layoutProfileId;
+    return (
+      workspace.layoutProfiles.find((p) => p.id === targetId) ||
+      workspace.layoutProfiles[0]
+    );
+  }, [workspace.layoutProfiles, activeCourse, activeLab]);
+
+  const activePageSetup = useMemo(
+    () => resolvePageSetup(activeLayout, activeLab),
+    [activeLayout, activeLab]
+  );
+
+  const resolvedVariables = useMemo(
+    () => buildVariableMap(workspace.globalVariables, activeCourse, activeLab),
+    [workspace.globalVariables, activeCourse, activeLab]
+  );
+
+  const missingVariables = useMemo(() => {
+    if (!activeLab) return [];
+    return findMissingVariablesInLab(
+      activeLab,
+      resolvedVariables,
+      workspace.modules,
+      activeLayout?.footerTemplate
+    );
+  }, [activeLab, resolvedVariables, workspace.modules, activeLayout?.footerTemplate]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Alt+ArrowUp / Alt+ArrowDown steps selection across blocks in the editor
+      if (
+        e.altKey &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        activeView === 'editor' &&
+        activeLab &&
+        (e.key === 'ArrowUp' || e.key === 'ArrowDown')
+      ) {
+        const visibleBlocks = activeLab.blocks.filter(
+          (b) => audienceMode === 'instructor' || b.audience !== 'instructor'
+        );
+        if (visibleBlocks.length === 0) return;
+        e.preventDefault();
+        const idx = selectedBlockId
+          ? visibleBlocks.findIndex((b) => b.id === selectedBlockId)
+          : -1;
+        const nextIdx =
+          e.key === 'ArrowDown'
+            ? idx < 0
+              ? 0
+              : Math.min(visibleBlocks.length - 1, idx + 1)
+            : idx < 0
+              ? visibleBlocks.length - 1
+              : Math.max(0, idx - 1);
+        const targetId = visibleBlocks[nextIdx].id;
+        setSelectedBlockId(targetId);
+        document
+          .getElementById(`block-${targetId}`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
@@ -165,39 +286,18 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [workspace, history.length, future.length, handleUndo, handleRedo, showToast]);
-
-  const activeLab = useMemo(
-    () => workspace.labs.find((l) => l.id === workspace.activeLabId) || workspace.labs[0],
-    [workspace.labs, workspace.activeLabId]
-  );
-
-  const activeCourse = useMemo(
-    () => workspace.courses.find((c) => c.id === activeLab?.courseId),
-    [workspace.courses, activeLab]
-  );
-
-  // Course-inherited layout consistency: use override only if explicitly enabled
-  const activeLayout = useMemo(() => {
-    const targetId =
-      activeLab?.layoutOverrideId ||
-      activeCourse?.defaultLayoutId ||
-      activeLab?.layoutProfileId;
-    return (
-      workspace.layoutProfiles.find((p) => p.id === targetId) ||
-      workspace.layoutProfiles[0]
-    );
-  }, [workspace.layoutProfiles, activeCourse, activeLab]);
-
-  const activePageSetup = useMemo(
-    () => resolvePageSetup(activeLayout, activeLab),
-    [activeLayout, activeLab]
-  );
-
-  const resolvedVariables = useMemo(
-    () => buildVariableMap(workspace.globalVariables, activeCourse, activeLab),
-    [workspace.globalVariables, activeCourse, activeLab]
-  );
+  }, [
+    workspace,
+    history.length,
+    future.length,
+    handleUndo,
+    handleRedo,
+    showToast,
+    activeView,
+    activeLab,
+    audienceMode,
+    selectedBlockId,
+  ]);
 
   const openSetupSection = useCallback((section: SetupSection, modId?: string | null) => {
     if (modId !== undefined) setFocusedModuleId(modId);
@@ -285,6 +385,27 @@ export default function App() {
     [activeLab, updateActiveLab]
   );
 
+  const handleConvertBlockType = useCallback(
+    (blockId: string, nextType: LabBlockType) => {
+      if (!activeLab) return;
+      const replacement = createDefaultBlock(nextType);
+      updateActiveLab((lab) => {
+        const idx = lab.blocks.findIndex((b) => b.id === blockId);
+        if (idx < 0) return lab;
+        const original = lab.blocks[idx];
+        const nextBlock: LabBlock = {
+          ...replacement,
+          audience: original.audience,
+        };
+        const blocks = [...lab.blocks];
+        blocks[idx] = nextBlock;
+        return { ...lab, blocks };
+      });
+      setSelectedBlockId(replacement.id);
+    },
+    [activeLab, updateActiveLab]
+  );
+
   const handleSmartInsert = useCallback(
     (type: LabBlockType, moduleId?: string) => {
       if (!activeLab) return;
@@ -316,15 +437,38 @@ export default function App() {
 
   const handleUpdateBlock = useCallback(
     (blockId: string, updated: LabBlock) => {
-      updateActiveLab(
-        (lab) => ({
-          ...lab,
-          blocks: lab.blocks.map((b) => (b.id === blockId ? updated : b)),
-        }),
-        false
-      );
+      if (!activeLab) return;
+      const labId = activeLab.id;
+      commitGroupedWorkspace(`block:${labId}:${blockId}`, (prev) => ({
+        ...prev,
+        labs: prev.labs.map((l) =>
+          l.id === labId
+            ? {
+                ...l,
+                updatedAt: new Date().toISOString(),
+                blocks: l.blocks.map((b) => (b.id === blockId ? updated : b)),
+              }
+            : l
+        ),
+      }));
     },
-    [updateActiveLab]
+    [activeLab, commitGroupedWorkspace]
+  );
+
+  const handleUpdateLabMeta = useCallback(
+    (patch: Partial<Pick<LabDocument, 'labNumber' | 'title' | 'subtitle' | 'estimatedTime'>>) => {
+      if (!activeLab) return;
+      const labId = activeLab.id;
+      commitGroupedWorkspace(`meta:${labId}`, (prev) => ({
+        ...prev,
+        labs: prev.labs.map((l) =>
+          l.id === labId
+            ? { ...l, ...patch, updatedAt: new Date().toISOString() }
+            : l
+        ),
+      }));
+    },
+    [activeLab, commitGroupedWorkspace]
   );
 
   const handleMoveBlock = useCallback(
@@ -385,6 +529,63 @@ export default function App() {
     },
     [workspace.modules, updateActiveLab, showToast]
   );
+
+  const handleConfirmSaveAsModule = (params: {
+    title: string;
+    category: string;
+    description: string;
+    replaceWithLink: boolean;
+  }) => {
+    if (!saveModuleBlock || !activeLab) return;
+    const modId = createId('mod');
+    const newModule: ReusableModule = {
+      id: modId,
+      title: params.title,
+      category: params.category,
+      description: params.description,
+      updatedAt: new Date().toISOString(),
+      blocks: [cloneBlockWithFreshIds(saveModuleBlock)],
+    };
+
+    const refBlockId = createId('blk');
+    const targetBlockId = saveModuleBlock.id;
+    const targetLabId = activeLab.id;
+
+    commitWorkspace((prev) => ({
+      ...prev,
+      modules: [newModule, ...prev.modules],
+      labs: params.replaceWithLink
+        ? prev.labs.map((l) =>
+            l.id === targetLabId
+              ? {
+                  ...l,
+                  updatedAt: new Date().toISOString(),
+                  blocks: l.blocks.map((b) =>
+                    b.id === targetBlockId
+                      ? {
+                          id: refBlockId,
+                          type: 'moduleRef' as const,
+                          audience: b.audience,
+                          moduleId: modId,
+                        }
+                      : b
+                  ),
+                }
+              : l
+          )
+        : prev.labs,
+    }));
+
+    if (params.replaceWithLink) {
+      setSelectedBlockId(refBlockId);
+    }
+    setSaveModuleBlock(null);
+    showToast(
+      params.replaceWithLink
+        ? `Saved "${newModule.title}" and linked it in place`
+        : `Saved "${newModule.title}" to Shared Modules`
+    );
+  };
 
   /* -------------------------- Course & Lab Creation ------------------------- */
 
@@ -456,6 +657,83 @@ export default function App() {
     showToast(`Added course ${newCourse.code}`);
   };
 
+  const handleConfirmRollover = (params: {
+    code: string;
+    nextSemester: string;
+    professor: string;
+    snapshotBeforeRollover: boolean;
+  }) => {
+    if (!rolloverCourseId) return;
+    const sourceCourse = workspace.courses.find((c) => c.id === rolloverCourseId);
+    if (!sourceCourse) return;
+
+    const newCourseId = createId('course');
+    const nowIso = new Date().toISOString();
+    const clonedCourse: Course = {
+      ...sourceCourse,
+      id: newCourseId,
+      code: params.code,
+      semester: params.nextSemester,
+      professor: params.professor,
+      variables: { ...sourceCourse.variables },
+    };
+
+    const sourceLabs = workspace.labs.filter((l) => l.courseId === sourceCourse.id);
+    const clonedLabs: LabDocument[] = sourceLabs.map((lab) => ({
+      ...JSON.parse(JSON.stringify(lab)),
+      id: createId('lab'),
+      courseId: newCourseId,
+      blocks: lab.blocks.map(cloneBlockWithFreshIds),
+      snapshots: [],
+      updatedAt: nowIso,
+    }));
+
+    commitWorkspace((prev) => {
+      const updatedExistingLabs = params.snapshotBeforeRollover
+        ? prev.labs.map((lab) => {
+            if (lab.courseId !== sourceCourse.id) return lab;
+            const archiveSnap: LabSnapshot = {
+              id: createId('snap'),
+              semester: sourceCourse.semester,
+              label: `${sourceCourse.semester} Archive (Before Rollover)`,
+              note: `Captured automatically when rolling over to ${params.nextSemester}.`,
+              createdAt: nowIso,
+              state: JSON.parse(
+                JSON.stringify({
+                  docKind: lab.docKind,
+                  labNumber: lab.labNumber,
+                  title: lab.title,
+                  subtitle: lab.subtitle,
+                  estimatedTime: lab.estimatedTime,
+                  layoutProfileId: lab.layoutProfileId,
+                  layoutOverrideId: lab.layoutOverrideId ?? null,
+                  pageSetupOverride: lab.pageSetupOverride ?? null,
+                  blocks: lab.blocks,
+                })
+              ),
+            };
+            return { ...lab, snapshots: [archiveSnap, ...lab.snapshots] };
+          })
+        : prev.labs;
+
+      return {
+        ...prev,
+        courses: [...prev.courses, clonedCourse],
+        labs: [...updatedExistingLabs, ...clonedLabs],
+        activeLabId: clonedLabs[0]?.id || prev.activeLabId,
+      };
+    });
+
+    setRolloverCourseId(null);
+    setSelectedBlockId(null);
+    setActiveView('editor');
+    showToast(
+      `Rolled over ${clonedCourse.code} to ${clonedCourse.semester} (${clonedLabs.length} ${
+        clonedLabs.length === 1 ? 'doc' : 'docs'
+      })`
+    );
+  };
+
   const handleDuplicateLab = (labId: string) => {
     const src = workspace.labs.find((l) => l.id === labId);
     if (!src) return;
@@ -464,6 +742,7 @@ export default function App() {
       ...JSON.parse(JSON.stringify(src)),
       id: copyId,
       title: `${src.title} (Copy)`,
+      blocks: src.blocks.map(cloneBlockWithFreshIds),
       snapshots: [],
       updatedAt: new Date().toISOString(),
     };
@@ -586,21 +865,23 @@ export default function App() {
     showToast(`Copied ${token} to clipboard`);
   };
 
-  const handlePrintPdf = (edition: AudienceMode) => {
+  const handlePrintPdf = (edition: AudienceMode, codeTheme?: CodePrintTheme) => {
     setPrintEdition(edition);
+    setPrintCodeTheme(codeTheme || activeLayout?.codePrintTheme || 'light');
     setShowExportModal(false);
     window.setTimeout(() => {
       window.print();
     }, 120);
   };
 
-  const handleDownloadHtml = (edition: AudienceMode) => {
+  const handleDownloadHtml = (edition: AudienceMode, codeTheme?: CodePrintTheme) => {
     if (!activeLab || !activeLayout) return;
     const html = generateStandaloneHtml({
       lab: activeLab,
       course: activeCourse,
       layout: activeLayout,
       pageSetup: activePageSetup,
+      codePrintTheme: codeTheme || activeLayout.codePrintTheme || 'light',
       globalVariables: workspace.globalVariables,
       modules: workspace.modules,
       audience: edition,
@@ -614,6 +895,47 @@ export default function App() {
     triggerFileDownload(filename, html, 'text/html;charset=utf-8');
     setShowExportModal(false);
     showToast(`Downloaded ${filename}`);
+  };
+
+  const handleDownloadMarkdown = (edition: AudienceMode) => {
+    if (!activeLab || !activeLayout) return;
+    const md = generateMarkdown({
+      lab: activeLab,
+      course: activeCourse,
+      layout: activeLayout,
+      globalVariables: workspace.globalVariables,
+      modules: workspace.modules,
+      audience: edition,
+    });
+    const filename = `${slugifyFilename([
+      activeCourse?.code || 'lab',
+      activeLab.labNumber,
+      activeLab.title,
+      edition,
+    ])}.md`;
+    triggerFileDownload(filename, md, 'text/markdown;charset=utf-8');
+    setShowExportModal(false);
+    showToast(`Downloaded ${filename}`);
+  };
+
+  const handleExportCourseZip = async (opts: {
+    editions: 'student' | 'instructor' | 'both';
+    formats: { html: boolean; markdown: boolean };
+    codePrintTheme: CodePrintTheme;
+  }) => {
+    if (!activeCourse) return;
+    const { filename, fileCount } = await exportCoursePacketZip({
+      course: activeCourse,
+      labs: activeCourseLabs,
+      layoutProfiles: workspace.layoutProfiles,
+      globalVariables: workspace.globalVariables,
+      modules: workspace.modules,
+      editions: opts.editions,
+      formats: opts.formats,
+      codePrintTheme: opts.codePrintTheme,
+    });
+    setShowExportModal(false);
+    showToast(`Exported ${filename} (${fileCount} files)`);
   };
 
   const handleImportBackupJson = (raw: string) => {
@@ -632,6 +954,10 @@ export default function App() {
     ? workspace.labs.find((l) => l.id === activeDiff.labId) || null
     : null;
 
+  const rolloverCourse = rolloverCourseId
+    ? workspace.courses.find((c) => c.id === rolloverCourseId) || null
+    : null;
+
   return (
     <>
       <div className="screen-only-app h-screen w-screen overflow-hidden flex flex-col bg-[#F1F5F9]">
@@ -645,6 +971,8 @@ export default function App() {
             labNumber={activeLab.labNumber}
             labTitle={activeLab.title}
             savedLabel={savedLabel}
+            missingVariables={missingVariables}
+            onOpenVariables={() => openSetupSection('variables')}
             leftDrawer={leftDrawer}
             onToggleLeftDrawer={toggleLeftDrawer}
             showSettingsDrawer={showDetailsDrawer}
@@ -663,7 +991,9 @@ export default function App() {
             onChangeZoom={setZoom}
             audienceMode={audienceMode}
             onChangeAudience={setAudienceMode}
-            onQuickPrint={() => handlePrintPdf(audienceMode)}
+            onQuickPrint={() =>
+              handlePrintPdf(audienceMode, activeLayout.codePrintTheme || 'light')
+            }
             onOpenExport={() => setShowExportModal(true)}
           />
         )}
@@ -689,6 +1019,7 @@ export default function App() {
                     )
                   }
                   onOpenNewCourse={() => setShowNewCourseModal(true)}
+                  onOpenRolloverCourse={(cid) => setRolloverCourseId(cid)}
                   onDuplicateLab={handleDuplicateLab}
                   onDeleteLab={handleDeleteLab}
                   onJumpToBlock={(blockId) => {
@@ -716,6 +1047,7 @@ export default function App() {
                 course={activeCourse}
                 layout={activeLayout}
                 pageSetup={activePageSetup}
+                codePrintTheme={activeLayout.codePrintTheme || 'light'}
                 audienceMode={audienceMode}
                 variables={resolvedVariables}
                 showRawTokens={showRawTokens}
@@ -724,15 +1056,15 @@ export default function App() {
                 zoom={zoom}
                 onPageCountChange={setPageCount}
                 onSelectBlock={setSelectedBlockId}
-                onUpdateLabMeta={(patch) =>
-                  updateActiveLab((lab) => ({ ...lab, ...patch }), false)
-                }
+                onUpdateLabMeta={handleUpdateLabMeta}
                 onUpdateBlock={handleUpdateBlock}
                 onMoveBlock={handleMoveBlock}
                 onDuplicateBlock={handleDuplicateBlock}
                 onDeleteBlock={handleDeleteBlock}
                 onInsertBlockAt={handleInsertBlockAt}
+                onConvertBlockType={handleConvertBlockType}
                 onReorderBlock={handleReorderBlock}
+                onSaveBlockAsModule={(blk) => setSaveModuleBlock(blk)}
                 onEditMasterModule={(moduleId) => openSetupSection('modules', moduleId)}
                 onDetachModule={handleDetachModule}
               />
@@ -919,6 +1251,7 @@ export default function App() {
                 setActiveDiff({ labId: lab.id, snapshot: snap })
               }
               onDeleteSnapshotForLab={handleDeleteSnapshotForLab}
+              onOpenRolloverCourse={(cid) => setRolloverCourseId(cid)}
             />
           )}
         </div>
@@ -928,17 +1261,40 @@ export default function App() {
           <ExportModal
             lab={activeLab}
             course={activeCourse}
+            courseLabs={activeCourseLabs}
             layout={activeLayout}
             pageSetup={activePageSetup}
             defaultAudience={audienceMode}
+            defaultCodePrintTheme={activeLayout.codePrintTheme || 'light'}
+            missingVariables={missingVariables}
+            onJumpToVariables={() => openSetupSection('variables')}
             onClose={() => setShowExportModal(false)}
             onPrintPdf={handlePrintPdf}
             onDownloadHtml={handleDownloadHtml}
+            onDownloadMarkdown={handleDownloadMarkdown}
+            onExportCourseZip={handleExportCourseZip}
             onExportBackupJson={() => {
               exportWorkspaceJson(workspace);
               showToast('Downloaded LabPress JSON backup');
             }}
             onImportBackupJson={handleImportBackupJson}
+          />
+        )}
+
+        {saveModuleBlock && (
+          <SaveAsModuleModal
+            block={saveModuleBlock}
+            onClose={() => setSaveModuleBlock(null)}
+            onConfirm={handleConfirmSaveAsModule}
+          />
+        )}
+
+        {rolloverCourse && (
+          <SemesterRolloverModal
+            course={rolloverCourse}
+            labCount={workspace.labs.filter((l) => l.courseId === rolloverCourse.id).length}
+            onClose={() => setRolloverCourseId(null)}
+            onConfirm={handleConfirmRollover}
           />
         )}
 
@@ -987,6 +1343,7 @@ export default function App() {
         course={activeCourse}
         layout={activeLayout}
         pageSetup={activePageSetup}
+        codePrintTheme={printCodeTheme}
         globalVariables={workspace.globalVariables}
         modules={workspace.modules}
         audienceMode={printEdition}

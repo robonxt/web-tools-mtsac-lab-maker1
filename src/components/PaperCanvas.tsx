@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Scissors, Trash2 } from 'lucide-react';
 import {
   AudienceMode,
+  CodePrintTheme,
   Course,
   LabBlock,
   LabBlockType,
@@ -15,6 +16,7 @@ import {
   computePageGeometry,
   paginateBlocks,
   resolvePageSetup,
+  SubItemHeights,
 } from '../lib/pageGeometry';
 import {
   clearActiveDrag,
@@ -22,11 +24,12 @@ import {
   readDragPayload,
   resolveDropEffect,
 } from '../lib/dnd';
+import { AutoGrowTextarea } from './AutoGrowTextarea';
 import { BlockView } from './BlockView';
 import { AddBlockMenu } from './AddBlockMenu';
 
 type DropIndicator =
-  | { kind: 'block'; blockId: string; edge: 'top' | 'bottom'; targetIndex: number }
+  | { kind: 'block'; entryKey: string; edge: 'top' | 'bottom'; targetIndex: number }
   | { kind: 'page-empty'; pageNumber: number; targetIndex: number }
   | { kind: 'page-end'; pageNumber: number; targetIndex: number };
 
@@ -35,6 +38,7 @@ interface PaperCanvasProps {
   course?: Course;
   layout: LayoutProfile;
   pageSetup?: PageSetup;
+  codePrintTheme?: CodePrintTheme;
   audienceMode: AudienceMode;
   variables: Record<string, string>;
   showRawTokens: boolean;
@@ -53,7 +57,9 @@ interface PaperCanvasProps {
   onDuplicateBlock?: (blockId: string) => void;
   onDeleteBlock?: (blockId: string) => void;
   onInsertBlockAt?: (index: number, type: LabBlockType, moduleId?: string) => void;
+  onConvertBlockType?: (blockId: string, type: LabBlockType) => void;
   onReorderBlock?: (blockId: string, targetIndex: number) => void;
+  onSaveBlockAsModule?: (block: LabBlock) => void;
   onEditMasterModule?: (moduleId: string) => void;
   onDetachModule?: (blockId: string, moduleId: string) => void;
 }
@@ -69,6 +75,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
   course,
   layout,
   pageSetup: explicitPageSetup,
+  codePrintTheme,
   audienceMode,
   variables,
   showRawTokens,
@@ -85,7 +92,9 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
   onDuplicateBlock,
   onDeleteBlock,
   onInsertBlockAt,
+  onConvertBlockType,
   onReorderBlock,
+  onSaveBlockAsModule,
   onEditMasterModule,
   onDetachModule,
 }) => {
@@ -109,13 +118,14 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     [lab.blocks]
   );
 
-  // Live DOM height measurement for true WYSIWYG pagination
+  // Live DOM height measurement for true WYSIWYG pagination (whole blocks + splittable sub-items)
   const headerRef = useRef<HTMLDivElement | null>(null);
-  const blockNodesRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  const pendingHeightsRef = useRef<Record<string, number> | null>(null);
+  const entryNodesRef = useRef<Map<string, { blockId: string; el: HTMLDivElement }>>(new Map());
+  const pendingMeasureRef = useRef<boolean>(false);
 
   const [headerHeightPx, setHeaderHeightPx] = useState<number>(138);
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
+  const [subItemHeights, setSubItemHeights] = useState<Record<string, SubItemHeights>>({});
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const isDraggingRef = useRef(false);
 
@@ -127,7 +137,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
       if (
         prev.kind === 'block' &&
         next.kind === 'block' &&
-        prev.blockId === next.blockId &&
+        prev.entryKey === next.entryKey &&
         prev.edge === next.edge
       ) {
         return prev;
@@ -149,8 +159,12 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     if (!active) return false;
     const tag = active.tagName;
     if (tag !== 'TEXTAREA' && tag !== 'INPUT') return false;
-    const blockEl = blockNodesRef.current.get(selectedBlockId);
-    return Boolean(blockEl && blockEl.contains(active));
+    for (const entry of entryNodesRef.current.values()) {
+      if (entry.blockId === selectedBlockId && entry.el.contains(active)) {
+        return true;
+      }
+    }
+    return false;
   }, [selectedBlockId, readOnly]);
 
   const measureAll = useCallback(
@@ -160,29 +174,65 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         return;
       }
 
+      const scale = printMode ? 1 : zoom / 100 || 1;
       const nextHeaderH = headerRef.current
-        ? Math.ceil(headerRef.current.getBoundingClientRect().height)
+        ? Math.ceil(headerRef.current.getBoundingClientRect().height / scale)
         : headerHeightPx;
 
-      const scale = printMode ? 1 : zoom / 100 || 1;
-      const adjustedHeaderH = Math.ceil(nextHeaderH / scale);
-
       const nextHeights: Record<string, number> = {};
-      blockNodesRef.current.forEach((node, id) => {
-        // Measure unscaled logical layout height
-        const rectH = node.offsetHeight || Math.ceil(node.getBoundingClientRect().height / scale);
-        if (rectH > 0) {
-          nextHeights[id] = rectH;
+      const nextSubCollector = new Map<string, { header: number; items: Map<number, number> }>();
+
+      entryNodesRef.current.forEach(({ blockId, el }, entryKey) => {
+        const isSliced = entryKey.includes('::');
+        const rectH = el.offsetHeight || Math.ceil(el.getBoundingClientRect().height / scale);
+        if (!isSliced && rectH > 0) {
+          nextHeights[blockId] = rectH;
+        }
+
+        // Collect per-item / per-row heights for Steps and Table blocks so pagination can split cleanly
+        const subItems = el.querySelectorAll<HTMLElement>('[data-sub-item-index]');
+        if (subItems.length > 0) {
+          let bucket = nextSubCollector.get(blockId);
+          if (!bucket) {
+            bucket = { header: 0, items: new Map<number, number>() };
+            nextSubCollector.set(blockId, bucket);
+          }
+
+          const headerEls = el.querySelectorAll<HTMLElement>('[data-sub-header="true"]');
+          let hdrSum = 0;
+          headerEls.forEach((hEl) => {
+            const h = hEl.offsetHeight || Math.ceil(hEl.getBoundingClientRect().height / scale);
+            hdrSum += h;
+          });
+          if (hdrSum > 0) {
+            // Include spacing between caption/header and first item
+            bucket.header = Math.max(bucket.header, hdrSum + 14);
+          }
+
+          const stepGap = layout.density === 'compact' ? 10 : 16;
+          subItems.forEach((itemEl) => {
+            const idxAttr = itemEl.getAttribute('data-sub-item-index');
+            if (idxAttr === null) return;
+            const idx = parseInt(idxAttr, 10);
+            if (!Number.isFinite(idx)) return;
+            const itemH =
+              itemEl.offsetHeight || Math.ceil(itemEl.getBoundingClientRect().height / scale);
+            if (itemH > 0) {
+              const extra = itemEl.tagName === 'LI' ? stepGap : 0;
+              bucket!.items.set(idx, itemH + extra);
+            }
+          });
         }
       });
 
       if (!force && isTypingInsideSelectedBlock()) {
-        pendingHeightsRef.current = nextHeights;
+        pendingMeasureRef.current = true;
         return;
       }
 
-      pendingHeightsRef.current = null;
-      setHeaderHeightPx((prev) => (Math.abs(prev - adjustedHeaderH) > 2 ? adjustedHeaderH : prev));
+      pendingMeasureRef.current = false;
+      setHeaderHeightPx((prev) => (Math.abs(prev - nextHeaderH) > 2 ? nextHeaderH : prev));
+
       setMeasuredHeights((prev) => {
         let changed = false;
         const merged = { ...prev };
@@ -194,8 +244,43 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         }
         return changed ? merged : prev;
       });
+
+      if (nextSubCollector.size > 0) {
+        setSubItemHeights((prev) => {
+          let changed = false;
+          const merged: Record<string, SubItemHeights> = { ...prev };
+          nextSubCollector.forEach((bucket, blockId) => {
+            const block = lab.blocks.find((b) => b.id === blockId);
+            if (!block || (block.type !== 'steps' && block.type !== 'table')) return;
+            const total = block.type === 'steps' ? block.items.length : block.rows.length;
+            const prevSub = prev[blockId];
+            const itemsArr: number[] = [];
+            for (let i = 0; i < total; i++) {
+              const measured = bucket.items.get(i);
+              if (measured !== undefined) {
+                itemsArr.push(measured);
+              } else if (prevSub && prevSub.items[i] !== undefined) {
+                itemsArr.push(prevSub.items[i]);
+              } else {
+                itemsArr.push(block.type === 'steps' ? 80 : 36);
+              }
+            }
+            const nextHeader = bucket.header || prevSub?.header || 36;
+            const diffHeader = !prevSub || Math.abs(prevSub.header - nextHeader) > 2;
+            const diffLen = !prevSub || prevSub.items.length !== itemsArr.length;
+            const diffItems =
+              diffLen ||
+              itemsArr.some((val, i) => Math.abs((prevSub?.items[i] ?? 0) - val) > 2);
+            if (diffHeader || diffItems) {
+              merged[blockId] = { header: nextHeader, items: itemsArr };
+              changed = true;
+            }
+          });
+          return changed ? merged : prev;
+        });
+      }
     },
-    [headerHeightPx, isTypingInsideSelectedBlock, printMode, zoom]
+    [headerHeightPx, isTypingInsideSelectedBlock, lab.blocks, layout.density, printMode, zoom]
   );
 
   // Clear drag indicator & unfreeze measurements whenever any drag ends anywhere in the window
@@ -253,6 +338,9 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     measureAll(true);
   }, [
     lab.id,
+    lab.labNumber,
+    lab.title,
+    lab.subtitle,
     lab.blocks,
     layout.fontFamily,
     layout.density,
@@ -265,20 +353,20 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     measureAll,
   ]);
 
-  // Observe dynamic resizing (e.g. font load, typing multiline, expanding modules)
+  // Observe dynamic resizing (e.g. font load, image load, typing multiline, expanding modules)
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
       measureAll(false);
     });
     if (headerRef.current) ro.observe(headerRef.current);
-    blockNodesRef.current.forEach((node) => ro.observe(node));
+    entryNodesRef.current.forEach(({ el }) => ro.observe(el));
     return () => ro.disconnect();
-  }, [lab.blocks, audienceMode, geometry.contentWidthPx, measureAll]);
+  }, [lab.blocks, audienceMode, geometry.contentWidthPx, selectedBlockId, measureAll]);
 
   // Flush any deferred height measurements smoothly when user finishes typing in an input/textarea
   const handleBlurCapture = useCallback(() => {
-    if (pendingHeightsRef.current) {
+    if (pendingMeasureRef.current) {
       window.requestAnimationFrame(() => measureAll(true));
     }
   }, [measureAll]);
@@ -289,11 +377,24 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         blocks: lab.blocks,
         audienceMode,
         measuredHeights,
+        subItemHeights,
         headerHeightPx,
         geometry,
         blockGapPx,
+        unsplittableBlockId: readOnly || printMode ? null : selectedBlockId,
       }),
-    [lab.blocks, audienceMode, measuredHeights, headerHeightPx, geometry, blockGapPx]
+    [
+      lab.blocks,
+      audienceMode,
+      measuredHeights,
+      subItemHeights,
+      headerHeightPx,
+      geometry,
+      blockGapPx,
+      readOnly,
+      printMode,
+      selectedBlockId,
+    ]
   );
 
   useEffect(() => {
@@ -313,42 +414,54 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
     ].filter(Boolean);
     const metaLine = metaParts.join(' · ');
 
+    const headerRecalcKey = `${lab.id}-${geometry.contentWidthPx}-${layout.headerVariant}-${layout.fontFamily}-${layout.density}`;
+
     const editableTitle = !readOnly && onUpdateLabMeta ? (
-      <div className="flex items-baseline gap-2.5">
-        <input
-          type="text"
-          value={lab.labNumber}
-          onChange={(e) => onUpdateLabMeta({ labNumber: e.target.value })}
-          aria-label="Document number"
-          className="w-24 font-bold text-[23px] tracking-tight bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none shrink-0"
-          style={{ color: layout.accentColor }}
-        />
-        <input
-          type="text"
+      <div className="flex items-start gap-2.5">
+        <div className="inline-grid items-center shrink-0 max-w-[40%]">
+          <span
+            aria-hidden="true"
+            className="col-start-1 row-start-1 invisible whitespace-pre font-bold text-[23px] leading-tight tracking-tight pr-0.5"
+          >
+            {lab.labNumber || 'Lab'}
+          </span>
+          <input
+            type="text"
+            value={lab.labNumber}
+            onChange={(e) => onUpdateLabMeta({ labNumber: e.target.value })}
+            aria-label="Document number"
+            className="col-start-1 row-start-1 w-full min-w-[2.5ch] font-bold text-[23px] leading-tight tracking-tight bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
+            style={{ color: layout.accentColor }}
+          />
+        </div>
+        <AutoGrowTextarea
           value={lab.title}
-          onChange={(e) => onUpdateLabMeta({ title: e.target.value })}
-          aria-label="Document title"
-          className="flex-1 font-bold text-[23px] tracking-tight text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none min-w-0"
+          onChange={(nextTitle) => onUpdateLabMeta({ title: nextTitle })}
+          placeholder="Document title..."
+          ariaLabel="Document title"
+          singleLineWrap
+          recalcKey={headerRecalcKey}
+          className="flex-1 min-w-0 font-bold text-[23px] leading-tight tracking-tight text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
         />
       </div>
     ) : (
-      <h1 className="text-[23px] font-bold tracking-tight text-slate-900 leading-tight">
+      <h1 className="text-[23px] font-bold tracking-tight text-slate-900 leading-tight break-words">
         <span style={{ color: layout.accentColor }}>{lab.labNumber}: </span>
         {resolveVariables(lab.title, variables, showRawTokens)}
       </h1>
     );
 
     const editableSubtitle = !readOnly && onUpdateLabMeta ? (
-      <input
-        type="text"
+      <AutoGrowTextarea
         value={lab.subtitle}
-        onChange={(e) => onUpdateLabMeta({ subtitle: e.target.value })}
+        onChange={(nextSubtitle) => onUpdateLabMeta({ subtitle: nextSubtitle })}
         placeholder="Add a brief subtitle or learning focus..."
-        aria-label="Document subtitle"
-        className="w-full mt-2 text-sm text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
+        ariaLabel="Document subtitle"
+        recalcKey={headerRecalcKey}
+        className="w-full mt-2 text-sm leading-relaxed text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-600 focus:outline-none"
       />
     ) : lab.subtitle ? (
-      <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+      <p className="mt-2 text-sm text-slate-600 leading-relaxed break-words">
         {resolveVariables(lab.subtitle, variables, showRawTokens)}
       </p>
     ) : null;
@@ -359,7 +472,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
           className="bg-slate-50 border border-slate-200 px-5 py-4 mb-6"
           style={{ borderTopWidth: '3px', borderTopColor: layout.accentColor }}
         >
-          <div className="text-xs text-slate-500 mb-1.5 tabular-nums">{metaLine}</div>
+          <div className="text-xs text-slate-500 mb-1.5 tabular-nums break-words">{metaLine}</div>
           {editableTitle}
           {editableSubtitle}
         </header>
@@ -371,13 +484,13 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         <header className="pb-4 mb-6 border-b border-slate-300">
           <div className="flex items-start justify-between gap-5">
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-slate-500 mb-1">
+              <div className="text-xs font-medium text-slate-500 mb-1 break-words">
                 {course?.code} — {course?.title} · {kindLabel}
               </div>
               {editableTitle}
               {editableSubtitle}
             </div>
-            <div className="w-48 shrink-0 bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700 space-y-0.5 tabular-nums">
+            <div className="w-48 shrink-0 bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-700 space-y-0.5 tabular-nums break-words">
               <div>
                 <span className="text-slate-400">Instructor: </span>
                 <span className="font-medium text-slate-900">{layout.professorName}</span>
@@ -417,7 +530,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
         className="pb-4 mb-6"
         style={{ borderBottomWidth: '2px', borderBottomColor: layout.accentColor }}
       >
-        <div className="text-xs text-slate-500 mb-1.5 tabular-nums">{metaLine}</div>
+        <div className="text-xs text-slate-500 mb-1.5 tabular-nums break-words">{metaLine}</div>
         {editableTitle}
         {editableSubtitle}
       </header>
@@ -604,17 +717,16 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                         return;
                       }
 
-                      // Cursor is in a gap between blocks or in the open area below the last block on this page
                       const cursorY = e.clientY;
                       for (let i = 0; i < page.entries.length; i++) {
                         const entry = page.entries[i];
-                        const node = blockNodesRef.current.get(entry.block.id);
+                        const node = entryNodesRef.current.get(entry.entryKey)?.el;
                         if (!node) continue;
                         const rect = node.getBoundingClientRect();
                         if (cursorY < rect.top + rect.height / 2) {
                           setDropIndicatorSafe({
                             kind: 'block',
-                            blockId: entry.block.id,
+                            entryKey: entry.entryKey,
                             edge: 'top',
                             targetIndex: entry.originalIndex,
                           });
@@ -637,7 +749,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                       const cursorY = e.clientY;
                       for (let i = 0; i < page.entries.length; i++) {
                         const entry = page.entries[i];
-                        const node = blockNodesRef.current.get(entry.block.id);
+                        const node = entryNodesRef.current.get(entry.entryKey)?.el;
                         if (!node) continue;
                         const rect = node.getBoundingClientRect();
                         if (cursorY < rect.top + rect.height / 2) {
@@ -666,28 +778,29 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                       </div>
                     ) : (
                       page.entries.map((entry, idxInPage) => {
-                        const { block, originalIndex } = entry;
+                        const { block, originalIndex, entryKey, slice } = entry;
                         const showTopLine =
                           dropIndicator?.kind === 'block' &&
-                          dropIndicator.blockId === block.id &&
+                          dropIndicator.entryKey === entryKey &&
                           dropIndicator.edge === 'top';
                         const isLastBlockOnPage = idxInPage === page.entries.length - 1;
                         const showBottomLine =
                           (dropIndicator?.kind === 'block' &&
-                            dropIndicator.blockId === block.id &&
+                            dropIndicator.entryKey === entryKey &&
                             dropIndicator.edge === 'bottom') ||
                           (isLastBlockOnPage &&
                             dropIndicator?.kind === 'page-end' &&
                             dropIndicator.pageNumber === page.pageNumber);
+                        const isLastSliceOfBlock = !slice || slice.end >= slice.total;
 
                         return (
                           <div
-                            key={block.id}
+                            key={entryKey}
                             ref={(el) => {
                               if (el) {
-                                blockNodesRef.current.set(block.id, el);
+                                entryNodesRef.current.set(entryKey, { blockId: block.id, el });
                               } else {
-                                blockNodesRef.current.delete(block.id);
+                                entryNodesRef.current.delete(entryKey);
                               }
                             }}
                             onDragOver={(e) => {
@@ -700,7 +813,7 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                               const isTopHalf = e.clientY < rect.top + rect.height / 2;
                               setDropIndicatorSafe({
                                 kind: 'block',
-                                blockId: block.id,
+                                entryKey,
                                 edge: isTopHalf ? 'top' : 'bottom',
                                 targetIndex: isTopHalf ? originalIndex : originalIndex + 1,
                               });
@@ -732,6 +845,9 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                               totalBlocks={lab.blocks.length}
                               isSelected={selectedBlockId === block.id}
                               readOnly={readOnly || printMode}
+                              printMode={printMode}
+                              codePrintTheme={codePrintTheme}
+                              slice={slice}
                               audienceMode={audienceMode}
                               layout={layout}
                               variables={variables}
@@ -742,10 +858,21 @@ export const PaperCanvas: React.FC<PaperCanvasProps> = ({
                               onMove={(dir) => onMoveBlock?.(block.id, dir)}
                               onDuplicate={() => onDuplicateBlock?.(block.id)}
                               onDelete={() => onDeleteBlock?.(block.id)}
+                              onConvertBlockType={(nextType) =>
+                                onConvertBlockType?.(block.id, nextType)
+                              }
+                              onInsertParagraphBelow={() =>
+                                onInsertBlockAt?.(originalIndex + 1, 'paragraph')
+                              }
+                              onSaveAsModule={
+                                onSaveBlockAsModule
+                                  ? () => onSaveBlockAsModule(block)
+                                  : undefined
+                              }
                               onEditMasterModule={onEditMasterModule}
                               onDetachModule={onDetachModule}
                             />
-                            {!readOnly && onInsertBlockAt && (
+                            {!readOnly && onInsertBlockAt && isLastSliceOfBlock && (
                               <div className="mt-1.5">
                                 <AddBlockMenu
                                   variant="divider"

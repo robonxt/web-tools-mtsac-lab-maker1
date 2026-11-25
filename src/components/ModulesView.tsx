@@ -3,9 +3,11 @@ import {
   AlertCircle,
   CheckSquare,
   Code2,
+  ImageIcon,
   Layers,
   ListOrdered,
   Plus,
+  Sigma,
   Table2,
   Trash2,
   Type,
@@ -44,6 +46,8 @@ const MODULE_BLOCK_TYPES: Array<{
   { type: 'checklist', label: 'Checklist', icon: CheckSquare },
   { type: 'steps', label: 'Steps', icon: ListOrdered },
   { type: 'code', label: 'Code', icon: Code2 },
+  { type: 'image', label: 'Figure', icon: ImageIcon },
+  { type: 'math', label: 'Equation', icon: Sigma },
   { type: 'table', label: 'Table', icon: Table2 },
 ];
 

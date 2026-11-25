@@ -69,11 +69,68 @@ export function collectBlockTexts(block: LabBlock): string[] {
       return [block.prompt, block.instructorSolution];
     case 'checklist':
       return [block.title, ...block.items.map((i) => i.text)];
+    case 'image':
+      return [block.caption, block.alt];
+    case 'math':
+      return [block.latex, block.label];
     case 'moduleRef':
       return [];
     case 'pageBreak':
       return [block.label];
   }
+}
+
+export interface MissingVariableIssue {
+  key: string;
+  count: number;
+}
+
+/**
+ * Scans a single lab document (header, blocks, linked modules, and optional layout footer)
+ * for any {{variable}} tokens that are undefined or blank in the resolved variable map.
+ */
+export function findMissingVariablesInLab(
+  lab: LabDocument,
+  variables: Record<string, string>,
+  modules: ReusableModule[],
+  footerTemplate?: string
+): MissingVariableIssue[] {
+  const counts = new Map<string, number>();
+  const moduleMap = new Map(modules.map((m) => [m.id, m]));
+
+  const scanText = (text: string) => {
+    if (!text) return;
+    const regex = new RegExp(VARIABLE_REGEX.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const key = m[1];
+      const val = variables[key];
+      if (val === undefined || val === '') {
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+  };
+
+  scanText(lab.title);
+  scanText(lab.subtitle);
+  if (footerTemplate) scanText(footerTemplate);
+
+  for (const blk of lab.blocks) {
+    if (blk.type === 'moduleRef') {
+      const mod = moduleMap.get(blk.moduleId);
+      if (mod) {
+        for (const mb of mod.blocks) {
+          for (const txt of collectBlockTexts(mb)) scanText(txt);
+        }
+      }
+    } else {
+      for (const txt of collectBlockTexts(blk)) scanText(txt);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export function computeVariableUsage(
@@ -112,14 +169,14 @@ export function computeVariableUsage(
 }
 
 export interface InlineToken {
-  kind: 'text' | 'bold' | 'italic' | 'code' | 'varResolved' | 'varMissing';
+  kind: 'text' | 'bold' | 'italic' | 'code' | 'math' | 'varResolved' | 'varMissing';
   content: string;
   rawKey?: string;
 }
 
 /**
- * Parses lightweight inline formatting (**bold**, *italic*, `code`, and {{var}})
- * into clean React-renderable tokens without using dangerouslySetInnerHTML.
+ * Parses lightweight inline formatting (**bold**, *italic*, `code`, $math$, and {{var}})
+ * into clean React-renderable tokens without raw HTML injection.
  */
 export function parseInlineRichText(
   text: string,
@@ -127,7 +184,9 @@ export function parseInlineRichText(
   showRawTokens: boolean
 ): InlineToken[] {
   if (!text) return [];
-  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g;
+  // Inline math matches $expr$ where expr does not start/end with whitespace and contains no newlines
+  const pattern =
+    /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`|\$(?!\s)(?:\\\$|[^$\n])+?(?<!\s)\$|\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g;
   const tokens: InlineToken[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -150,6 +209,11 @@ export function parseInlineRichText(
     } else if (raw.startsWith('`') && raw.endsWith('`')) {
       tokens.push({
         kind: 'code',
+        content: resolveVariables(raw.slice(1, -1), variables, showRawTokens),
+      });
+    } else if (raw.startsWith('$') && raw.endsWith('$') && raw.length >= 3) {
+      tokens.push({
+        kind: 'math',
         content: resolveVariables(raw.slice(1, -1), variables, showRawTokens),
       });
     } else if (raw.startsWith('{{') && raw.endsWith('}}')) {

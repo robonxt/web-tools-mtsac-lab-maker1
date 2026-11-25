@@ -5,6 +5,7 @@ import {
   Copy,
   FilePlus2,
   FolderPlus,
+  RefreshCw,
   Search,
   Trash2,
   X,
@@ -19,6 +20,7 @@ interface SidebarProps {
   onSelectLab: (labId: string) => void;
   onOpenNewLab: (courseId?: string) => void;
   onOpenNewCourse: () => void;
+  onOpenRolloverCourse: (courseId: string) => void;
   onDuplicateLab: (labId: string) => void;
   onDeleteLab: (labId: string) => void;
   onJumpToBlock: (blockId: string) => void;
@@ -39,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectLab,
   onOpenNewLab,
   onOpenNewCourse,
+  onOpenRolloverCourse,
   onDuplicateLab,
   onDeleteLab,
   onJumpToBlock,
@@ -61,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         (course &&
           (course.code.toLowerCase().includes(q) ||
             course.professor.toLowerCase().includes(q) ||
+            course.semester.toLowerCase().includes(q) ||
             course.title.toLowerCase().includes(q)))
       );
     });
@@ -165,6 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => toggleCourse(course.id)}
+                  title={`${course.code} — ${course.title} (${course.semester})`}
                   className="flex items-center gap-1.5 min-w-0 text-left group cursor-pointer"
                 >
                   {isCollapsed ? (
@@ -176,18 +181,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div className="text-xs font-semibold text-slate-800 truncate group-hover:text-blue-700">
                       {course.code}
                       <span className="font-normal text-slate-400 mx-1">·</span>
-                      <span className="font-normal text-slate-500">{course.professor}</span>
+                      <span className="font-normal text-slate-500">{course.semester}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 truncate">
+                      {course.professor}
                     </div>
                   </div>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenNewLab(course.id)}
-                  title={`Add document to ${course.code}`}
-                  className="p-1 text-slate-400 hover:text-blue-700 rounded transition-colors shrink-0 cursor-pointer"
-                >
-                  <FilePlus2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onOpenRolloverCourse(course.id)}
+                    title={`Roll over ${course.code} to next semester`}
+                    aria-label={`Roll over ${course.code} to next semester`}
+                    className="p-1 text-slate-400 hover:text-blue-700 rounded transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenNewLab(course.id)}
+                    title={`Add document to ${course.code}`}
+                    aria-label={`Add document to ${course.code}`}
+                    className="p-1 text-slate-400 hover:text-blue-700 rounded transition-colors cursor-pointer"
+                  >
+                    <FilePlus2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {!isCollapsed && (

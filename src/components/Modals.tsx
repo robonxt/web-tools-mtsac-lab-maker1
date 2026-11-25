@@ -1,17 +1,25 @@
 import React, { useRef, useState } from 'react';
 import {
+  AlertTriangle,
+  Archive,
+  Braces,
   Download,
   FileCode2,
   FileJson,
+  FileText,
+  Layers,
   Printer,
+  RefreshCw,
   RotateCcw,
   Upload,
   X,
 } from 'lucide-react';
 import {
   AudienceMode,
+  CodePrintTheme,
   Course,
   DocKind,
+  LabBlock,
   LabDocument,
   LabSnapshot,
   LayoutProfile,
@@ -21,6 +29,8 @@ import {
 import { LabTemplateKind } from '../lib/blockFactory';
 import { diffSnapshotWithCurrent } from '../lib/diff';
 import { formatPageSetupSummary } from '../lib/pageGeometry';
+import { MissingVariableIssue } from '../lib/variables';
+import { suggestNextSemester } from '../lib/exporter';
 
 /* -------------------------------------------------------------------------- */
 /*                                Export Modal                                */
@@ -29,12 +39,22 @@ import { formatPageSetupSummary } from '../lib/pageGeometry';
 interface ExportModalProps {
   lab: LabDocument;
   course?: Course;
+  courseLabs: LabDocument[];
   layout: LayoutProfile;
   pageSetup: PageSetup;
   defaultAudience: AudienceMode;
+  defaultCodePrintTheme: CodePrintTheme;
+  missingVariables: MissingVariableIssue[];
+  onJumpToVariables: () => void;
   onClose: () => void;
-  onPrintPdf: (edition: AudienceMode) => void;
-  onDownloadHtml: (edition: AudienceMode) => void;
+  onPrintPdf: (edition: AudienceMode, codePrintTheme: CodePrintTheme) => void;
+  onDownloadHtml: (edition: AudienceMode, codePrintTheme: CodePrintTheme) => void;
+  onDownloadMarkdown: (edition: AudienceMode) => void;
+  onExportCourseZip: (opts: {
+    editions: 'student' | 'instructor' | 'both';
+    formats: { html: boolean; markdown: boolean };
+    codePrintTheme: CodePrintTheme;
+  }) => Promise<void>;
   onExportBackupJson: () => void;
   onImportBackupJson: (raw: string) => void;
 }
@@ -42,16 +62,31 @@ interface ExportModalProps {
 export const ExportModal: React.FC<ExportModalProps> = ({
   lab,
   course,
+  courseLabs,
   layout,
   pageSetup,
   defaultAudience,
+  defaultCodePrintTheme,
+  missingVariables,
+  onJumpToVariables,
   onClose,
   onPrintPdf,
   onDownloadHtml,
+  onDownloadMarkdown,
+  onExportCourseZip,
   onExportBackupJson,
   onImportBackupJson,
 }) => {
+  const [tab, setTab] = useState<'document' | 'packet'>('document');
   const [edition, setEdition] = useState<AudienceMode>(defaultAudience);
+  const [codePrintTheme, setCodePrintTheme] = useState<CodePrintTheme>(defaultCodePrintTheme);
+
+  // Course Packet ZIP state
+  const [packetEditions, setPacketEditions] = useState<'student' | 'instructor' | 'both'>('both');
+  const [includeHtml, setIncludeHtml] = useState(true);
+  const [includeMarkdown, setIncludeMarkdown] = useState(true);
+  const [isZipping, setIsZipping] = useState(false);
+
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,21 +101,35 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     reader.readAsText(file);
   };
 
+  const handleZipClick = async () => {
+    if (!includeHtml && !includeMarkdown) return;
+    setIsZipping(true);
+    try {
+      await onExportCourseZip({
+        editions: packetEditions,
+        formats: { html: includeHtml, markdown: includeMarkdown },
+        codePrintTheme,
+      });
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+        className="w-full max-w-xl bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div>
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0">
+          <div className="min-w-0">
             <h2 className="text-base font-semibold text-slate-900">
-              Export &amp; Publish Lab
+              Export &amp; Publish
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 truncate">
               {course?.code} · {lab.labNumber}: {lab.title} · {layout.name}
             </p>
           </div>
@@ -88,80 +137,298 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {/* Edition Selector */}
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-800">Select Edition</div>
-            <div className="grid grid-cols-2 gap-2.5">
+        {/* Mode Switcher */}
+        <div className="px-6 pt-4 shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-md border border-slate-200/80">
+            <button
+              type="button"
+              onClick={() => setTab('document')}
+              className={`py-1.5 px-3 text-xs font-medium rounded transition-colors cursor-pointer ${
+                tab === 'document'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              This Document
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('packet')}
+              className={`py-1.5 px-3 text-xs font-medium rounded transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer ${
+                tab === 'packet'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5 text-slate-500" />
+              Course Packet (.zip)
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Missing Variables Warning Banner */}
+          {missingVariables.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3.5 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950 min-w-0">
+                  <div className="font-semibold">
+                    {missingVariables.length} unresolved{' '}
+                    {missingVariables.length === 1 ? 'variable' : 'variables'} in this document
+                  </div>
+                  <div className="text-amber-800 mt-0.5 break-words font-mono text-[11px]">
+                    {missingVariables.map((v) => `{{${v.key}}}`).join(', ')}
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setEdition('student')}
-                className={`p-3 text-left rounded-md border transition-colors cursor-pointer ${
-                  edition === 'student'
-                    ? 'border-blue-600 bg-blue-50/60'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
+                onClick={() => {
+                  onClose();
+                  onJumpToVariables();
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-amber-950 bg-white border border-amber-300 hover:bg-amber-100 rounded-md whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <div className="text-xs font-semibold text-slate-900">Student Handout</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Hides instructor notes &amp; reveals lined answer boxes
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEdition('instructor')}
-                className={`p-3 text-left rounded-md border transition-colors cursor-pointer ${
-                  edition === 'instructor'
-                    ? 'border-amber-600 bg-amber-50/70'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <div className="text-xs font-semibold text-slate-900">Instructor Key</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">
-                  Includes pacing notes, answer keys &amp; grading rubrics
-                </div>
+                <Braces className="w-3 h-3" />
+                Fix in Variables
               </button>
             </div>
-          </div>
+          )}
 
-          {/* Primary Publishing Actions */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => onPrintPdf(edition)}
-              className="flex flex-col items-start gap-1.5 p-4 rounded-md border border-slate-200 hover:border-blue-600 hover:bg-blue-50/40 transition-colors text-left cursor-pointer"
-            >
-              <Printer className="w-5 h-5 text-blue-700" />
-              <span className="text-sm font-semibold text-slate-900">
-                Print / Save as PDF
-              </span>
-              <span className="text-xs text-slate-500">
-                Vector-crisp {formatPageSetupSummary(pageSetup)} print layout matching editor pages
-              </span>
-            </button>
+          {tab === 'document' ? (
+            <>
+              {/* Edition Selector */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-800">Select Edition</div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEdition('student')}
+                    className={`p-3 text-left rounded-md border transition-colors cursor-pointer ${
+                      edition === 'student'
+                        ? 'border-blue-600 bg-blue-50/60'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">Student Handout</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Hides instructor notes &amp; reveals lined answer boxes
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEdition('instructor')}
+                    className={`p-3 text-left rounded-md border transition-colors cursor-pointer ${
+                      edition === 'instructor'
+                        ? 'border-amber-600 bg-amber-50/70'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">Instructor Key</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Includes pacing notes, answer keys &amp; grading rubrics
+                    </div>
+                  </button>
+                </div>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => onDownloadHtml(edition)}
-              className="flex flex-col items-start gap-1.5 p-4 rounded-md border border-slate-200 hover:border-blue-600 hover:bg-blue-50/40 transition-colors text-left cursor-pointer"
-            >
-              <FileCode2 className="w-5 h-5 text-teal-700" />
-              <span className="text-sm font-semibold text-slate-900">
-                Download HTML
-              </span>
-              <span className="text-xs text-slate-500">
-                Single self-contained file for Canvas, Moodle, or web
-              </span>
-            </button>
-          </div>
+              {/* Code Print Theme Toggle */}
+              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-md">
+                <div>
+                  <div className="text-xs font-semibold text-slate-800">
+                    Code Block Print Style
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Applies to PDF printouts and printed HTML pages
+                  </div>
+                </div>
+                <div className="inline-flex items-center p-0.5 bg-white border border-slate-200 rounded-md shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCodePrintTheme('light')}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                      codePrintTheme === 'light'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Ink-Saving Light
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCodePrintTheme('dark')}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                      codePrintTheme === 'dark'
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Dark Editor
+                  </button>
+                </div>
+              </div>
 
-          {/* Local Storage Portability / Future Cloud Migration */}
+              {/* Primary Publishing Actions */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => onPrintPdf(edition, codePrintTheme)}
+                  className="flex flex-col items-start gap-1.5 p-3.5 rounded-md border border-slate-200 hover:border-blue-600 hover:bg-blue-50/40 transition-colors text-left cursor-pointer"
+                >
+                  <Printer className="w-5 h-5 text-blue-700" />
+                  <span className="text-xs font-semibold text-slate-900">
+                    Print / Save PDF
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-snug">
+                    {formatPageSetupSummary(pageSetup)} vector pages matching editor
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onDownloadHtml(edition, codePrintTheme)}
+                  className="flex flex-col items-start gap-1.5 p-3.5 rounded-md border border-slate-200 hover:border-blue-600 hover:bg-blue-50/40 transition-colors text-left cursor-pointer"
+                >
+                  <FileCode2 className="w-5 h-5 text-teal-700" />
+                  <span className="text-xs font-semibold text-slate-900">
+                    Standalone HTML
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-snug">
+                    Self-contained LMS file with math &amp; copyable code
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onDownloadMarkdown(edition)}
+                  className="flex flex-col items-start gap-1.5 p-3.5 rounded-md border border-slate-200 hover:border-blue-600 hover:bg-blue-50/40 transition-colors text-left cursor-pointer"
+                >
+                  <FileText className="w-5 h-5 text-slate-700" />
+                  <span className="text-xs font-semibold text-slate-900">
+                    Markdown (.md)
+                  </span>
+                  <span className="text-[11px] text-slate-500 leading-snug">
+                    Clean Git / Canvas / Pandoc-ready document
+                  </span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-md bg-slate-50 border border-slate-200 p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-slate-900">
+                    {course ? `${course.code} — ${course.title}` : 'Current Course'}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+                    {course?.semester} · {courseLabs.length}{' '}
+                    {courseLabs.length === 1 ? 'document' : 'documents'} bundled into one archive
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-800">Editions to Include</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: 'student', label: 'Student Only' },
+                      { id: 'instructor', label: 'Answer Keys' },
+                      { id: 'both', label: 'Both (Folders)' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setPacketEditions(opt.id)}
+                      className={`py-2 px-2.5 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                        packetEditions === opt.id
+                          ? 'border-blue-600 bg-blue-50/60 text-blue-900'
+                          : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-slate-800">File Formats</div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeHtml}
+                      onChange={(e) => setIncludeHtml(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                    />
+                    Standalone HTML (.html)
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeMarkdown}
+                      onChange={(e) => setIncludeMarkdown(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                    />
+                    Markdown (.md)
+                  </label>
+                </div>
+              </div>
+
+              {includeHtml && (
+                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-md">
+                  <span className="text-xs font-medium text-slate-700">HTML Code Print Style</span>
+                  <div className="inline-flex items-center p-0.5 bg-white border border-slate-200 rounded-md">
+                    <button
+                      type="button"
+                      onClick={() => setCodePrintTheme('light')}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                        codePrintTheme === 'light'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Ink-Saving Light
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCodePrintTheme('dark')}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded transition-colors cursor-pointer ${
+                        codePrintTheme === 'dark'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Dark Editor
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={isZipping || (!includeHtml && !includeMarkdown) || courseLabs.length === 0}
+                onClick={handleZipClick}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:pointer-events-none rounded-md transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                {isZipping
+                  ? 'Building Course ZIP...'
+                  : `Download Course Packet (${courseLabs.length} ${courseLabs.length === 1 ? 'doc' : 'docs'})`}
+              </button>
+            </div>
+          )}
+
+          {/* Local Storage Backup */}
           <div className="pt-4 border-t border-slate-200 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-800">
@@ -199,6 +466,322 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*                         Save Block as Module Modal                         */
+/* -------------------------------------------------------------------------- */
+
+function suggestModuleTitle(block: LabBlock): string {
+  switch (block.type) {
+    case 'heading':
+      return block.text.trim() || 'Shared Heading';
+    case 'steps':
+      return block.title.trim() || 'Shared Procedure';
+    case 'code':
+      return block.title.trim() || 'Shared Code Snippet';
+    case 'callout':
+      return block.title.trim() || 'Shared Notice';
+    case 'table':
+      return block.caption.trim() || 'Shared Reference Table';
+    case 'checklist':
+      return block.title.trim() || 'Shared Submission Checklist';
+    case 'image':
+      return block.caption.trim() || 'Shared Diagram';
+    case 'math':
+      return block.label.trim() ? `Equation ${block.label.trim()}` : 'Shared Equation';
+    case 'response':
+      return block.prompt.trim().slice(0, 48) || 'Shared Question';
+    case 'paragraph':
+      return block.text.trim().slice(0, 48) || 'Shared Text Section';
+    default:
+      return 'Shared Module';
+  }
+}
+
+interface SaveAsModuleModalProps {
+  block: LabBlock;
+  onClose: () => void;
+  onConfirm: (params: {
+    title: string;
+    category: string;
+    description: string;
+    replaceWithLink: boolean;
+  }) => void;
+}
+
+export const SaveAsModuleModal: React.FC<SaveAsModuleModalProps> = ({
+  block,
+  onClose,
+  onConfirm,
+}) => {
+  const [title, setTitle] = useState(() => suggestModuleTitle(block));
+  const [category, setCategory] = useState('Lab Procedure');
+  const [description, setDescription] = useState('');
+  const [replaceWithLink, setReplaceWithLink] = useState(true);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm({
+      title: title.trim() || 'Shared Module',
+      category: category.trim() || 'General',
+      description: description.trim(),
+      replaceWithLink,
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-teal-700" />
+            <h2 className="text-base font-semibold text-slate-900">
+              Save as Shared Module
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Promote this section to your Shared Modules library so it can be reused and updated across multiple labs from one source of truth.
+          </p>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Module Title</span>
+            <input
+              type="text"
+              required
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Git Submission Rules"
+              className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Category</span>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+            >
+              <option value="Lab Procedure">Lab Procedure</option>
+              <option value="Course Policy">Course Policy</option>
+              <option value="Setup Guide">Setup Guide</option>
+              <option value="Submission Checklist">Submission Checklist</option>
+              <option value="Reference">Reference</option>
+            </select>
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Description (optional)</span>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Where and how this module should be used..."
+              className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+            />
+          </label>
+
+          <label className="flex items-start gap-2.5 p-3 rounded-md bg-teal-50/70 border border-teal-200/80 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={replaceWithLink}
+              onChange={(e) => setReplaceWithLink(e.target.checked)}
+              className="mt-0.5 rounded border-teal-400 text-teal-700 focus:ring-teal-600"
+            />
+            <span className="text-xs text-teal-950 leading-snug">
+              <strong className="font-semibold">Replace this block with a synced module link</strong>
+              <span className="block text-[11px] text-teal-800 mt-0.5">
+                Future edits to the Shared Module will automatically update this document.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 text-xs font-medium text-slate-700 border border-slate-200 bg-white rounded-md cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-md cursor-pointer"
+          >
+            Save Shared Module
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+/* -------------------------------------------------------------------------- */
+/*                          Semester Rollover Modal                           */
+/* -------------------------------------------------------------------------- */
+
+interface SemesterRolloverModalProps {
+  course: Course;
+  labCount: number;
+  onClose: () => void;
+  onConfirm: (params: {
+    code: string;
+    nextSemester: string;
+    professor: string;
+    snapshotBeforeRollover: boolean;
+  }) => void;
+}
+
+export const SemesterRolloverModal: React.FC<SemesterRolloverModalProps> = ({
+  course,
+  labCount,
+  onClose,
+  onConfirm,
+}) => {
+  const [code, setCode] = useState(course.code);
+  const [nextSemester, setNextSemester] = useState(() => suggestNextSemester(course.semester));
+  const [professor, setProfessor] = useState(course.professor);
+  const [snapshotBeforeRollover, setSnapshotBeforeRollover] = useState(true);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm({
+      code: code.trim() || course.code,
+      nextSemester: nextSemester.trim() || suggestNextSemester(course.semester),
+      professor: professor.trim() || course.professor,
+      snapshotBeforeRollover,
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-blue-700" />
+            <h2 className="text-base font-semibold text-slate-900">
+              Roll Over Course to New Semester
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="p-1 text-slate-400 hover:text-slate-700 rounded cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Clones <strong>{course.code}</strong> ({course.semester}) and all{' '}
+            <strong>
+              {labCount} {labCount === 1 ? 'document' : 'documents'}
+            </strong>{' '}
+            into a fresh term with updated <code className="font-mono">{`{{semester}}`}</code> variables, while leaving the original term intact.
+          </p>
+
+          <div className="grid grid-cols-3 gap-3">
+            <label className="block space-y-1">
+              <span className="text-xs font-medium text-slate-600">Course Code</span>
+              <input
+                type="text"
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+              />
+            </label>
+            <label className="col-span-2 block space-y-1">
+              <span className="text-xs font-medium text-slate-600">New Semester</span>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={nextSemester}
+                onChange={(e) => setNextSemester(e.target.value)}
+                placeholder="e.g. Spring 2027"
+                className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+              />
+            </label>
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-slate-600">Instructor</span>
+            <input
+              type="text"
+              required
+              value={professor}
+              onChange={(e) => setProfessor(e.target.value)}
+              className="w-full text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-3 py-2 focus:outline-none focus:bg-white focus:border-blue-600"
+            />
+          </label>
+
+          <label className="flex items-start gap-2.5 p-3 rounded-md bg-slate-50 border border-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={snapshotBeforeRollover}
+              onChange={(e) => setSnapshotBeforeRollover(e.target.checked)}
+              className="mt-0.5 rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+            />
+            <span className="text-xs text-slate-800 leading-snug">
+              <strong className="font-semibold">
+                Archive snapshot on existing {course.semester} documents first
+              </strong>
+              <span className="block text-[11px] text-slate-500 mt-0.5">
+                Preserves a clean historical baseline before rolling over.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 text-xs font-medium text-slate-700 border border-slate-200 bg-white rounded-md cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-800 rounded-md cursor-pointer"
+          >
+            Roll Over Course
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
@@ -504,7 +1087,7 @@ export const NewLabModal: React.FC<NewLabModalProps> = ({
             >
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.code} — {c.title} ({c.professor})
+                  {c.code} ({c.semester}) — {c.title} ({c.professor})
                 </option>
               ))}
             </select>

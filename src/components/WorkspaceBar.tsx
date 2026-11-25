@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   BookOpen,
   Braces,
@@ -12,6 +13,7 @@ import {
   KeyRound,
   Layers,
   Minus,
+  MoreHorizontal,
   Palette,
   Plus,
   Printer,
@@ -26,6 +28,7 @@ import {
   SetupSection,
   WorkspaceView,
 } from '../types/lab';
+import { MissingVariableIssue } from '../lib/variables';
 import { formatPageSetupSummary, PAPER_SIZES } from '../lib/pageGeometry';
 import { PageSetupControls } from './PageSetupControls';
 
@@ -42,6 +45,8 @@ interface WorkspaceBarProps {
   labNumber: string;
   labTitle: string;
   savedLabel: string;
+  missingVariables: MissingVariableIssue[];
+  onOpenVariables: () => void;
   leftDrawer: LeftDrawerMode;
   onToggleLeftDrawer: (mode: Exclude<LeftDrawerMode, 'none'>) => void;
   showSettingsDrawer: boolean;
@@ -84,6 +89,8 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
   labNumber,
   labTitle,
   savedLabel,
+  missingVariables,
+  onOpenVariables,
   leftDrawer,
   onToggleLeftDrawer,
   showSettingsDrawer,
@@ -106,20 +113,45 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
   onOpenExport,
 }) => {
   const [showPagePopover, setShowPagePopover] = useState(false);
+  const [showMissingPopover, setShowMissingPopover] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+
   const pagePopoverRef = useRef<HTMLDivElement | null>(null);
+  const missingPopoverRef = useRef<HTMLDivElement | null>(null);
+  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!showPagePopover) return;
+    if (!showPagePopover && !showMissingPopover && !showOverflowMenu) return;
     const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
       if (
+        showPagePopover &&
         pagePopoverRef.current &&
-        !pagePopoverRef.current.contains(e.target as Node)
+        !pagePopoverRef.current.contains(target)
       ) {
         setShowPagePopover(false);
       }
+      if (
+        showMissingPopover &&
+        missingPopoverRef.current &&
+        !missingPopoverRef.current.contains(target)
+      ) {
+        setShowMissingPopover(false);
+      }
+      if (
+        showOverflowMenu &&
+        overflowMenuRef.current &&
+        !overflowMenuRef.current.contains(target)
+      ) {
+        setShowOverflowMenu(false);
+      }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowPagePopover(false);
+      if (e.key === 'Escape') {
+        setShowPagePopover(false);
+        setShowMissingPopover(false);
+        setShowOverflowMenu(false);
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -127,7 +159,7 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPagePopover]);
+  }, [showPagePopover, showMissingPopover, showOverflowMenu]);
 
   const sizeSpec = PAPER_SIZES[pageSetup.size] || PAPER_SIZES.letter;
 
@@ -298,7 +330,10 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
               <span className="text-slate-300 shrink-0">/</span>
             </>
           )}
-          <span className="font-medium text-slate-900 truncate max-w-[190px]" title={`${labNumber}: ${labTitle}`}>
+          <span
+            className="font-medium text-slate-900 truncate max-w-[180px]"
+            title={`${labNumber}: ${labTitle}`}
+          >
             {labNumber}: {labTitle}
           </span>
           <span className="text-slate-300 hidden 2xl:inline shrink-0">·</span>
@@ -308,8 +343,74 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
         </div>
       </div>
 
-      {/* Right / Center-Right Cluster: Page Setup, Zoom, View Mode, Quick Print, Course Setup, Settings, Export */}
+      {/* Right Cluster: Missing Variable Alert, Page Setup, Zoom, View Mode, Course Setup, Print, Settings, Overflow, Export */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {/* Missing Variable Warning Popover (shown only when unresolved {{tokens}} exist) */}
+        {missingVariables.length > 0 && (
+          <div className="relative" ref={missingPopoverRef}>
+            <button
+              type="button"
+              onClick={() => setShowMissingPopover((v) => !v)}
+              aria-expanded={showMissingPopover}
+              aria-haspopup="dialog"
+              title="Undefined variable tokens detected in this document"
+              className="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100/90 border border-amber-200 rounded-md transition-colors whitespace-nowrap shrink-0 tabular-nums cursor-pointer"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="hidden sm:inline">
+                {missingVariables.length} missing{' '}
+                {missingVariables.length === 1 ? 'var' : 'vars'}
+              </span>
+              <span className="sm:hidden">{missingVariables.length}</span>
+            </button>
+
+            {showMissingPopover && (
+              <div
+                role="dialog"
+                aria-label="Missing variables"
+                className="absolute right-0 top-[calc(100%+8px)] z-50 w-[290px] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden"
+              >
+                <div className="px-4 py-3 border-b border-slate-200 bg-amber-50/60">
+                  <div className="text-xs font-semibold text-amber-950">
+                    Unresolved Variable Tokens
+                  </div>
+                  <div className="text-[11px] text-amber-800 mt-0.5">
+                    Define these keys before exporting handouts.
+                  </div>
+                </div>
+                <ul className="max-h-48 overflow-y-auto divide-y divide-slate-100 px-4 py-1.5">
+                  {missingVariables.map((item) => (
+                    <li
+                      key={item.key}
+                      className="py-1.5 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <code className="font-mono text-amber-900 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded truncate">
+                        {`{{${item.key}}}`}
+                      </code>
+                      <span className="text-[11px] text-slate-400 tabular-nums shrink-0">
+                        {item.count}×
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMissingPopover(false);
+                      onOpenVariables();
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 cursor-pointer"
+                  >
+                    <Braces className="w-3.5 h-3.5" />
+                    Define in Variables
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Page Setup Popover */}
         <div className="relative" ref={pagePopoverRef}>
           <button
@@ -387,9 +488,9 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
           )}
         </div>
 
-        {/* Inline Zoom Controls */}
+        {/* Inline Zoom Controls (desktop xl+; moves into overflow menu below xl) */}
         <div
-          className="hidden sm:flex items-center rounded-md hover:bg-slate-50 px-0.5 shrink-0"
+          className="hidden xl:flex items-center rounded-md hover:bg-slate-50 px-0.5 shrink-0"
           role="group"
           aria-label="Zoom"
         >
@@ -463,26 +564,25 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
           </button>
         </div>
 
-        <span className="h-5 w-px bg-slate-200 mx-0.5 shrink-0" aria-hidden="true" />
+        <span className="hidden xl:block h-5 w-px bg-slate-200 mx-0.5 shrink-0" aria-hidden="true" />
 
-        {/* Course Setup Link */}
+        {/* Desktop Secondary Utilities (xl+) */}
         <button
           type="button"
           onClick={() => onChangeView('setup')}
           title="Course Setup — Layouts, Variables, Shared Modules & Snapshots"
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
         >
           <BookOpen className="w-3.5 h-3.5 text-slate-500" />
           Course
         </button>
 
-        {/* Universal Icon-Only Quick Print & Settings */}
         <button
           type="button"
           onClick={onQuickPrint}
           aria-label="Print or Save as PDF"
           title={`Print / Save PDF (${audienceMode === 'instructor' ? 'Answer Key' : 'Student'})`}
-          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors shrink-0 cursor-pointer"
+          className="hidden xl:inline-flex p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors shrink-0 cursor-pointer"
         >
           <Printer className="w-4 h-4" />
         </button>
@@ -492,7 +592,7 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
           onClick={onToggleSettingsDrawer}
           aria-label="Document settings"
           title="Document settings & snapshots"
-          className={`p-1.5 rounded-md transition-colors shrink-0 cursor-pointer ${
+          className={`hidden xl:inline-flex p-1.5 rounded-md transition-colors shrink-0 cursor-pointer ${
             showSettingsDrawer
               ? 'bg-slate-100 text-slate-900'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -500,6 +600,102 @@ export const WorkspaceBar: React.FC<WorkspaceBarProps> = ({
         >
           <SlidersHorizontal className="w-4 h-4" />
         </button>
+
+        {/* Responsive Overflow Menu (< xl viewports) */}
+        <div className="relative xl:hidden" ref={overflowMenuRef}>
+          <button
+            type="button"
+            onClick={() => setShowOverflowMenu((v) => !v)}
+            aria-label="More workspace tools"
+            aria-expanded={showOverflowMenu}
+            aria-haspopup="menu"
+            title="Zoom, Course Setup, Print & Settings"
+            className={`p-1.5 rounded-md transition-colors shrink-0 cursor-pointer ${
+              showOverflowMenu
+                ? 'bg-slate-100 text-slate-900'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+
+          {showOverflowMenu && (
+            <div
+              role="menu"
+              className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden py-1.5"
+            >
+              <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-500">Zoom</span>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => stepZoom(-1)}
+                    disabled={zoom <= ZOOM_STEPS[0]}
+                    aria-label="Zoom out"
+                    className="p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 rounded cursor-pointer"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChangeZoom(100)}
+                    className="px-1.5 py-0.5 text-[11px] font-mono tabular-nums text-slate-700 hover:bg-slate-100 rounded cursor-pointer"
+                  >
+                    {zoom}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stepZoom(1)}
+                    disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+                    aria-label="Zoom in"
+                    className="p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-30 rounded cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setShowOverflowMenu(false);
+                  onChangeView('setup');
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+                Course Setup
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setShowOverflowMenu(false);
+                  onQuickPrint();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-500" />
+                Print / Save PDF
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setShowOverflowMenu(false);
+                  onToggleSettingsDrawer();
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                Document Settings
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Primary Export Button */}
         <button

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Copy, Plus, Trash2 } from 'lucide-react';
 import {
+  CodePrintTheme,
   Course,
   DensityChoice,
   FontChoice,
@@ -71,6 +72,7 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
       density: 'comfortable',
       showPageNumbers: true,
       footerTemplate: '{{course_code}} · {{lab_number}} · {{semester}}',
+      codePrintTheme: 'light',
       pageSetup: { ...DEFAULT_PAGE_SETUP, margins: { ...DEFAULT_PAGE_SETUP.margins } },
     };
     onCreateLayout(profile);
@@ -327,6 +329,37 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
                 <option value="compact">Compact Worksheet</option>
               </select>
             </label>
+          </div>
+
+          {/* Code Block Print Style */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-medium text-slate-500">
+              Code Block Print Style (Screen stays dark)
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  { id: 'light', label: 'Ink-Saving Light Print' },
+                  { id: 'dark', label: 'Dark Editor Print' },
+                ] as Array<{ id: CodePrintTheme; label: string }>
+              ).map((opt) => {
+                const activeTheme = selected.codePrintTheme || 'light';
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onUpdateLayout({ ...selected, codePrintTheme: opt.id })}
+                    className={`py-1.5 px-2 text-xs font-medium rounded border transition-colors cursor-pointer ${
+                      activeTheme === opt.id
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Accent Color */}

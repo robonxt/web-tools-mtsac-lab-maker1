@@ -4,11 +4,13 @@ import {
   CheckSquare,
   Code2,
   Heading2,
+  ImageIcon,
   Layers,
   ListOrdered,
   MessageSquareText,
   Plus,
   Scissors,
+  Sigma,
   Table2,
   Type,
 } from 'lucide-react';
@@ -38,18 +40,20 @@ const GROUPS: Array<{
     ],
   },
   {
-    title: 'Lab Guide',
+    title: 'Lab Guide & STEM',
     items: [
       { type: 'steps', label: 'Steps', hint: 'Numbered guide', icon: ListOrdered },
       { type: 'code', label: 'Code', hint: 'Snippet & output', icon: Code2 },
-      { type: 'checklist', label: 'Checklist', hint: 'Checkboxes', icon: CheckSquare },
+      { type: 'image', label: 'Figure / Image', hint: 'Diagram or photo', icon: ImageIcon },
+      { type: 'math', label: 'Math Equation', hint: 'Display LaTeX', icon: Sigma },
     ],
   },
   {
-    title: 'Homework',
+    title: 'Homework & Checks',
     items: [
       { type: 'response', label: 'Question', hint: 'Prompt & key', icon: MessageSquareText },
       { type: 'table', label: 'Table', hint: 'Grid or rubric', icon: Table2 },
+      { type: 'checklist', label: 'Checklist', hint: 'Checkboxes', icon: CheckSquare },
     ],
   },
 ];

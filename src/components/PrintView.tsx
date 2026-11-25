@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   AudienceMode,
+  CodePrintTheme,
   Course,
   LabDocument,
   LayoutProfile,
@@ -16,6 +17,7 @@ interface PrintViewProps {
   course?: Course;
   layout?: LayoutProfile;
   pageSetup?: PageSetup;
+  codePrintTheme?: CodePrintTheme;
   globalVariables: Record<string, string>;
   modules: ReusableModule[];
   audienceMode: AudienceMode;
@@ -26,6 +28,7 @@ export const PrintView: React.FC<PrintViewProps> = ({
   course,
   layout,
   pageSetup,
+  codePrintTheme,
   globalVariables,
   modules,
   audienceMode,
@@ -44,6 +47,7 @@ export const PrintView: React.FC<PrintViewProps> = ({
         course={course}
         layout={layout}
         pageSetup={effectiveSetup}
+        codePrintTheme={codePrintTheme || layout.codePrintTheme || 'light'}
         audienceMode={audienceMode}
         variables={variables}
         showRawTokens={false}

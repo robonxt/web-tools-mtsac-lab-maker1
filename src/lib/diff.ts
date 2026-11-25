@@ -36,6 +36,16 @@ export function summarizeBlock(block: LabBlock, modules: ReusableModule[]): { la
         label: `Checklist (${block.items.length} items)`,
         summary: `${block.title}: ${block.items.map((i) => i.text).join('; ')}`,
       };
+    case 'image':
+      return {
+        label: `Image / Figure (${block.width}%)`,
+        summary: block.caption || block.alt || '(Untitled figure)',
+      };
+    case 'math':
+      return {
+        label: `Math Equation${block.label ? ` ${block.label}` : ''}`,
+        summary: block.latex || '(Empty equation)',
+      };
     case 'moduleRef': {
       const mod = modules.find((m) => m.id === block.moduleId);
       return {

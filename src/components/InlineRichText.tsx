@@ -1,5 +1,6 @@
 import React from 'react';
 import { parseInlineRichText } from '../lib/variables';
+import { renderLatexToHtml } from '../lib/math';
 
 interface InlineRichTextProps {
   text: string;
@@ -41,6 +42,17 @@ export const InlineRichText: React.FC<InlineRichTextProps> = ({
                 {tok.content}
               </code>
             );
+          case 'math': {
+            const rendered = renderLatexToHtml(tok.content, false);
+            return (
+              <span
+                key={idx}
+                title={rendered.error ? `LaTeX error: ${rendered.error}` : `$${tok.content}$`}
+                className="inline-block align-baseline px-0.5"
+                dangerouslySetInnerHTML={{ __html: rendered.html }}
+              />
+            );
+          }
           case 'varResolved':
             return (
               <span
@@ -55,7 +67,7 @@ export const InlineRichText: React.FC<InlineRichTextProps> = ({
             return (
               <span
                 key={idx}
-                title="Undefined variable — define it in the Variables tab"
+                title="Undefined variable — define it in Course Setup → Variables"
                 className="font-mono text-[0.86em] bg-amber-50 text-amber-800 px-1 py-0.5 rounded border border-amber-300"
               >
                 {tok.content}

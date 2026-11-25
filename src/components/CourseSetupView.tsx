@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GitCompare, Plus, Trash2 } from 'lucide-react';
+import { GitCompare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import {
   Course,
   LabDocument,
@@ -43,6 +43,7 @@ interface CourseSetupViewProps {
   onCreateSnapshotForLab: (labId: string, semester: string, label: string, note: string) => void;
   onOpenSnapshotDiffForLab: (lab: LabDocument, snapshot: LabSnapshot) => void;
   onDeleteSnapshotForLab: (labId: string, snapshotId: string) => void;
+  onOpenRolloverCourse: (courseId: string) => void;
 }
 
 export const CourseSetupView: React.FC<CourseSetupViewProps> = ({
@@ -72,6 +73,7 @@ export const CourseSetupView: React.FC<CourseSetupViewProps> = ({
   onCreateSnapshotForLab,
   onOpenSnapshotDiffForLab,
   onDeleteSnapshotForLab,
+  onOpenRolloverCourse,
 }) => {
   const [snapCourseFilter, setSnapCourseFilter] = useState<string>('all');
   const [capturingLabId, setCapturingLabId] = useState<string | null>(null);
@@ -154,32 +156,51 @@ export const CourseSetupView: React.FC<CourseSetupViewProps> = ({
                   </p>
                 </div>
 
-                <div className="inline-flex items-center p-1 bg-white border border-slate-200 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setSnapCourseFilter('all')}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-                      snapCourseFilter === 'all'
-                        ? 'bg-slate-900 text-white'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    All Courses
-                  </button>
-                  {courses.map((c) => (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="inline-flex items-center p-1 bg-white border border-slate-200 rounded-lg">
                     <button
-                      key={c.id}
                       type="button"
-                      onClick={() => setSnapCourseFilter(c.id)}
+                      onClick={() => setSnapCourseFilter('all')}
                       className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
-                        snapCourseFilter === c.id
+                        snapCourseFilter === 'all'
                           ? 'bg-slate-900 text-white'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      {c.code}
+                      All Courses
                     </button>
-                  ))}
+                    {courses.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSnapCourseFilter(c.id)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+                          snapCourseFilter === c.id
+                            ? 'bg-slate-900 text-white'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {c.code}
+                      </button>
+                    ))}
+                  </div>
+
+                  {courses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetCourseId =
+                          snapCourseFilter !== 'all'
+                            ? snapCourseFilter
+                            : activeLab.courseId || courses[0].id;
+                        onOpenRolloverCourse(targetCourseId);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-blue-700 bg-white border border-blue-200 hover:bg-blue-50 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Roll Over Course
+                    </button>
+                  )}
                 </div>
               </div>
 
