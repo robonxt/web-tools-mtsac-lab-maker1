@@ -12,37 +12,30 @@ export function createDefaultBlock(type: LabBlockType, moduleId?: string): LabBl
         id,
         type: 'heading',
         level: 2,
-        text: 'Section Heading',
+        text: '',
         audience: 'all',
       };
     case 'paragraph':
       return {
         id,
         type: 'paragraph',
-        text: 'Write instructions, background context, or use **bold**, *italic*, `inline code`, and {{semester}} variables.',
+        text: '',
         audience: 'all',
       };
     case 'steps':
       return {
         id,
         type: 'steps',
-        title: 'Procedure',
+        title: 'Steps',
         startNumber: 1,
         audience: 'all',
         items: [
           {
             id: createId('stp'),
-            title: 'Prepare your environment',
-            body: 'Open a terminal session on `{{vm_host}}` and verify your working directory.',
-            minutes: '5 min',
+            title: '',
+            body: '',
+            minutes: '',
             checkpoint: '',
-          },
-          {
-            id: createId('stp'),
-            title: 'Run and verify output',
-            body: 'Execute the command and inspect the output before proceeding.',
-            minutes: '10 min',
-            checkpoint: 'Confirm zero error codes in stderr.',
           },
         ],
       };
@@ -51,9 +44,9 @@ export function createDefaultBlock(type: LabBlockType, moduleId?: string): LabBl
         id,
         type: 'code',
         language: 'bash',
-        title: 'Terminal Command',
-        code: '# Example command\nls -la ~/labs/{{course_code}}',
-        expectedOutput: 'total 16\ndrwxr-xr-x 2 student student 4096 ...',
+        title: '',
+        code: '',
+        expectedOutput: '',
         showLineNumbers: true,
         audience: 'all',
       };
@@ -62,42 +55,37 @@ export function createDefaultBlock(type: LabBlockType, moduleId?: string): LabBl
         id,
         type: 'callout',
         variant: 'tip',
-        title: 'Lab Tip',
-        body: 'Double-check your file permissions before running scripts on the shared lab host.',
+        title: '',
+        body: '',
         audience: 'all',
       };
     case 'table':
       return {
         id,
         type: 'table',
-        caption: 'Deliverables & Grading Rubric',
-        headers: ['Criteria', 'Expected Result', 'Points'],
-        rows: [
-          ['Environment Setup', 'Configured without errors', '10'],
-          ['Core Implementation', 'Passes all test cases', '25'],
-          ['Reflection Questions', 'Clear, accurate explanations', '15'],
-        ],
+        caption: '',
+        headers: ['Column 1', 'Column 2'],
+        rows: [['', '']],
         audience: 'all',
       };
     case 'response':
       return {
         id,
         type: 'response',
-        prompt: 'Explain why the command output changed after modifying the configuration file.',
+        prompt: '',
         points: 10,
         answerLines: 4,
-        instructorSolution:
-          'Award full credit if the student identifies the configuration reload requirement and references the updated PID or exit status.',
+        instructorSolution: '',
         audience: 'all',
       };
     case 'checklist':
       return {
         id,
         type: 'checklist',
-        title: 'Prerequisites & Verification',
+        title: 'Checklist',
         audience: 'all',
         items: [
-          { id: createId('chk'), text: 'Connected to campus VPN or lab subnet' },
+          { id: createId('chk'), text: '' },
           { id: createId('chk'), text: 'Verified toolchain version matches {{semester}} syllabus' },
         ],
       };

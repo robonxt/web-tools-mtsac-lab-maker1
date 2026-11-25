@@ -63,9 +63,9 @@ export const LayoutsView: React.FC<LayoutsViewProps> = ({
   const handleNewProfile = () => {
     const profile: LayoutProfile = {
       id: createId('layout'),
-      name: 'Custom Professor Layout',
-      professorName: 'Prof. New Instructor',
-      department: 'Computer Science',
+      name: 'Custom Layout',
+      professorName: '',
+      department: '',
       headerVariant: 'editorial',
       fontFamily: 'sans',
       accentColor: '#1D4ED8',
