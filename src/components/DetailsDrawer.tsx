@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { GitCompare, Plus, RotateCcw, X } from 'lucide-react';
+import { GitCompare, Plus, RotateCcw } from 'lucide-react';
 import {
   Course,
   DocKind,
@@ -9,6 +9,7 @@ import {
   PageSetup,
 } from '../types/lab';
 import { PageSetupControls } from './PageSetupControls';
+import { DrawerShell } from './DrawerShell';
 
 interface DetailsDrawerProps {
   lab: LabDocument;
@@ -75,18 +76,12 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
   };
 
   return (
-    <aside className="w-[320px] shrink-0 bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-900">Document Settings</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close document settings"
-          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+    <DrawerShell
+      side="right"
+      title="Document Settings"
+      onClose={onClose}
+      closeLabel="Close document settings"
+    >
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Document Info */}
@@ -367,6 +362,6 @@ export const DetailsDrawer: React.FC<DetailsDrawerProps> = ({
           </div>
         </section>
       </div>
-    </aside>
+    </DrawerShell>
   );
 };

@@ -8,9 +8,9 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  X,
 } from 'lucide-react';
 import { Course, LabDocument, ReusableModule } from '../types/lab';
+import { DrawerShell } from './DrawerShell';
 
 interface SidebarProps {
   courses: Course[];
@@ -103,21 +103,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-[280px] shrink-0 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
-      {/* Drawer Header */}
-      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-900">Files</span>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close files drawer"
-            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+    <DrawerShell
+      side="left"
+      title="Files"
+      onClose={onClose}
+      closeLabel="Close files drawer"
+    >
 
       {/* Search & Creation Controls */}
       <div className="p-3.5 border-b border-slate-200 space-y-2.5">
@@ -345,6 +336,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
       )}
-    </aside>
+    </DrawerShell>
   );
 };

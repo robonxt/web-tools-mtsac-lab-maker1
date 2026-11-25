@@ -14,10 +14,10 @@ import {
   Sigma,
   Table2,
   Type,
-  X,
 } from 'lucide-react';
 import { LabBlockType, ReusableModule } from '../types/lab';
 import { clearActiveDrag, writeDragPayload } from '../lib/dnd';
+import { DrawerShell } from './DrawerShell';
 
 interface InsertDrawerProps {
   modules: ReusableModule[];
@@ -52,24 +52,13 @@ export const InsertDrawer: React.FC<InsertDrawerProps> = ({
   onClose,
 }) => {
   return (
-    <aside className="w-[272px] shrink-0 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden select-none">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <div className="text-xs font-semibold text-slate-900">Insert</div>
-          <div className="text-[11px] text-slate-500">
-            Drag onto any page or click to add
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close insert panel"
-          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+    <DrawerShell
+      side="left"
+      title="Insert"
+      subtitle="Drag onto page or click to add"
+      onClose={onClose}
+      closeLabel="Close insert panel"
+    >
 
       {/* Scrollable Body */}
       <div className="flex-1 overflow-y-auto p-3.5 space-y-5">
@@ -179,6 +168,6 @@ export const InsertDrawer: React.FC<InsertDrawerProps> = ({
           )}
         </section>
       </div>
-    </aside>
+    </DrawerShell>
   );
 };
